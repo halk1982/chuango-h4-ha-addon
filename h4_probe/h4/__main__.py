@@ -1,0 +1,81 @@
+"""Run interactively or using HAOS /data/options.json; never log credentials."""
+import argparse
+import getpass
+import json
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from .client import StatusClient
+from .protocol import AuthenticationError, PanelOfflineError, ProtocolError
+
+
+def run(options):
+    samples = options.get("samples", 1)
+    interval = options.get("interval", 10)
+    if type(samples) is not int or not 1 <= samples <= 300:
+        raise ValueError("samples must be an integer from 1 to 300")
+    if type(interval) is not int or not 5 <= interval <= 300:
+        raise ValueError("interval must be an integer from 5 to 300")
+    if type(options.get("allow_plaintext", False)) is not bool:
+        raise ValueError("allow_plaintext must be a boolean")
+    zone = ZoneInfo(options.get("timezone", "Europe/Athens"))
+    client = StatusClient(options.get("device_id", ""), options.get("username", ""),
+                          options.get("password", ""),
+                          allow_plaintext=options.get("allow_plaintext", False))
+    print("Experimental H4 status probe: login and status queries only; live compatibility unverified.", file=sys.stderr, flush=True)
+    try:
+        client.connect()
+        for i in range(samples):
+            status = client.status(datetime.now(zone))
+            output = status.as_dict()
+            output["observed_at"] = datetime.now(timezone.utc).isoformat()
+            output["sample"] = i + 1
+            print(json.dumps(output), flush=True)
+            if i + 1 < samples:
+                client.wait(interval)
+    finally:
+        client.close()
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="Experimental status-only Chuango H4 probe")
+    parser.add_argument("--options", type=Path, help="Private JSON options file (HAOS uses /data/options.json)")
+    parser.add_argument("--allow-plaintext", action="store_true", help="Accept the app's unencrypted TCP login transport")
+    parser.add_argument("--samples", type=int, default=1)
+    parser.add_argument("--interval", type=int, default=10)
+    parser.add_argument("--timezone", default="Europe/Athens")
+    args = parser.parse_args(argv)
+    try:
+        if args.options:
+            options = json.loads(args.options.read_text())
+            if not isinstance(options, dict):
+                raise ValueError("Options must be a JSON object")
+        else:
+            if not args.allow_plaintext:
+                parser.error("The app uses unencrypted TCP. Read README.md and use --allow-plaintext to opt in.")
+            options = {"device_id": input("Panel device ID: "), "username": input("App username: "),
+                       "password": getpass.getpass("App password: "),
+                       "allow_plaintext": True, "samples": args.samples,
+                       "interval": args.interval, "timezone": args.timezone}
+        run(options)
+        return 0
+    except AuthenticationError as error:
+        print(f"Authentication failed: {error}. No automatic login retries.", file=sys.stderr)
+    except PanelOfflineError:
+        print("Panel offline according to server. No status asserted.", file=sys.stderr)
+    except ProtocolError as error:
+        print(f"Protocol compatibility check failed: {error}. No status asserted.", file=sys.stderr)
+    except (OSError, TimeoutError):
+        print("Network or options-file access failed. Check connectivity and file access; no status asserted.", file=sys.stderr)
+    except (ValueError, TypeError, ZoneInfoNotFoundError):
+        print("Invalid options. Check required fields, limits, timezone and plaintext opt-in.", file=sys.stderr)
+    except (KeyboardInterrupt, EOFError):
+        print("Probe stopped.", file=sys.stderr)
+        return 130
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

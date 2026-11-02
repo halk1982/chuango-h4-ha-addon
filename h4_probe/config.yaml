@@ -1,0 +1,27 @@
+name: Chuango H4 Status Probe (experimental)
+version: "0.1.0"
+slug: chuango_h4_probe
+description: Experimental status-only compatibility test for the original Chuango H4
+url: https://github.com/halk1982/chuango-h4-ha-addon
+arch:
+  - amd64
+  - aarch64
+startup: once
+boot: manual
+init: false
+options:
+  device_id: ""
+  username: ""
+  password: ""
+  allow_plaintext: false
+  samples: 6
+  interval: 10
+  timezone: Europe/Athens
+schema:
+  device_id: str
+  username: str
+  password: password
+  allow_plaintext: bool
+  samples: int(1,300)
+  interval: int(5,300)
+  timezone: str
