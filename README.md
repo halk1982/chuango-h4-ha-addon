@@ -2,10 +2,11 @@
 
 Experimental interoperability work for the **original Chuango H4**. The current
 deliverable is a **status-only compatibility probe**, available as an HAOS
-add-on or a Python command. It has not yet been tested with a real panel.
+add-on or a Python command. Initial user testing has confirmed status reads;
+mode transitions, alarm behavior and concurrent app sessions remain under test.
 
 The add-on declares amd64 and aarch64 support; the container has been built and
-tested on amd64 only. A physical HAOS installation has not yet been tested.
+tested on amd64 only. User feedback covers an initial HAOS status-read run.
 
 It sends directory lookup, handshake, login, heartbeat and status-refresh
 requests reconstructed from H4 Smarthome 5.5.0. It has no arm, disarm, siren,
@@ -74,6 +75,14 @@ If the test fails, share only the sanitized error text. If it works, share
 whether changing mode with the RF remote was reflected correctly. Device IDs,
 usernames and passwords are excluded from probe output. Accessory records can
 still disclose sensor information and event times; redact them before sharing.
+
+If opening the phone app ends the probe session, see the
+[session test and notification guide](h4_probe/DOCS.md#check-whether-the-phone-app-replaces-the-probes-session).
+Version 0.1.1 distinguishes the app's logged-in-elsewhere notification (`CGS0251`)
+from its account-removed notification (`CGS0252`). Version 0.1.0 combined them,
+so its existing error text cannot identify which one arrived. A logout is not
+evidence of rate limiting. The probe stops rather than automatically competing
+with the phone app for a session.
 
 ## Alternative local installation
 

@@ -3,14 +3,16 @@ import contextlib
 import io
 import json
 import socket
+import tempfile
 import threading
 import unittest
 from datetime import datetime
+from pathlib import Path
 from unittest.mock import patch
 
 from h4.client import MAX_LINE, StatusClient, Wire
 from h4.protocol import AuthenticationError, PanelOfflineError, ProtocolError
-from h4.__main__ import run
+from h4.__main__ import main, run
 
 
 class Server:
@@ -144,6 +146,41 @@ class ClientTests(unittest.TestCase):
             self.assertEqual(json.loads(output.getvalue())["mode"], "disarmed")
             for secret in ("PANEL0001", "owner123", "secret456"):
                 self.assertNotIn(secret, output.getvalue()+errors.getvalue())
+
+    def test_logout_after_successful_status_is_reported_without_relogin(self):
+        for code, expected in (("51", "Session ended:"), ("52", "Account notification:")):
+            with self.subTest(notification=code):
+                def session(conn, stream, requests):
+                    handshake(conn, stream, requests)
+                    requests.append(stream.readline())
+                    conn.sendall(b"CGS021055551000520200\r\n")
+                    requests.append(stream.readline())
+                    conn.sendall(f"CGS02{code}\r\n".encode())
+                    # The client must close, not try another login or query.
+                    self.assertEqual(stream.readline(), b"")
+                with Server(session) as server, tempfile.TemporaryDirectory() as tmp:
+                    options = Path(tmp)/"options.json"
+                    options.write_text(json.dumps({
+                        "device_id":"PANEL0001", "username":"owner123", "password":"secret456",
+                        "allow_plaintext":True, "samples":3, "interval":10,
+                    }))
+                    output, errors = io.StringIO(), io.StringIO()
+                    def factory(*args, **kwargs):
+                        return StatusClient(*args, endpoint=server.endpoint, **kwargs)
+                    with patch("h4.__main__.StatusClient", side_effect=factory), \
+                            patch.object(StatusClient, "wait"), \
+                            contextlib.redirect_stdout(output), contextlib.redirect_stderr(errors):
+                        result = main(["--options", str(options)])
+                    self.assertEqual(result, 1)
+                    self.assertEqual(len(output.getvalue().splitlines()), 1)
+                    self.assertEqual(json.loads(output.getvalue())["mode"], "armed_home")
+                    self.assertIn(expected, errors.getvalue())
+                    self.assertIn("CGS02"+code, errors.getvalue())
+                    self.assertIn("no automatic login retries", errors.getvalue())
+                    self.assertNotIn("Authentication failed", errors.getvalue())
+                    for secret in ("PANEL0001", "owner123", "secret456"):
+                        self.assertNotIn(secret, output.getvalue()+errors.getvalue())
+                    self.assertEqual(len(server.requests), 4)
 
 
 if __name__ == "__main__":

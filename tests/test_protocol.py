@@ -2,7 +2,8 @@ import unittest
 from datetime import datetime
 
 from h4.protocol import (
-    AuthenticationError, PanelOfflineError, ProtocolError, directory_request,
+    AccountRemovedError, AuthenticationError, PanelOfflineError, ProtocolError,
+    SessionReplacedError, directory_request,
     forwarded_payload, handshake_request, heartbeat_request, login_request,
     parse_directory, parse_frame, parse_status, require_success, status_request,
 )
@@ -51,9 +52,10 @@ class ProtocolTests(unittest.TestCase):
     def test_offline_and_session_revocation(self):
         with self.assertRaises(PanelOfflineError):
             parse_frame("CGS01")
-        for line in ("CGS0251", "CGS0252"):
-            with self.assertRaises(AuthenticationError):
+        for line, error in (("CGS0251", SessionReplacedError), ("CGS0252", AccountRemovedError)):
+            with self.subTest(notification=line), self.assertRaises(error) as caught:
                 parse_frame(line)
+            self.assertIn(line, str(caught.exception))
 
     def test_relay_lengths_are_enforced(self):
         self.assertEqual(forwarded_payload(parse_frame("CGS021055551000520100")), "20100")

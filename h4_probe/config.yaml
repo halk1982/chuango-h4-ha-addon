@@ -1,5 +1,5 @@
 name: Chuango H4 Status Probe (experimental)
-version: "0.1.0"
+version: "0.1.1"
 slug: chuango_h4_probe
 description: Experimental status-only compatibility test for the original Chuango H4
 url: https://github.com/halk1982/chuango-h4-ha-addon

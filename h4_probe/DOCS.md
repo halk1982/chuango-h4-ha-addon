@@ -1,7 +1,8 @@
 # Configure the first test
 
-This is an experimental status-only probe. It has not been tested with your
-physical H4 yet and does not create Home Assistant entities. It runs briefly,
+This is an experimental status-only probe. Initial user testing has confirmed
+successful status reads; state transitions and concurrent sessions still need
+validation. It does not create Home Assistant entities. It runs briefly,
 logs the replies, then stops. It cannot send arm/disarm or settings commands.
 
 ## Enter your settings
@@ -48,6 +49,11 @@ states. Errors do not produce an assumed armed or disarmed state.
 - **Authentication failed:** verify the ID and app login details locally.
   The probe stops without automatic login retries. Server-specific optional
   metadata requirements remain a possibility.
+- **Session ended / CGS0251:** the app handles this as an account logged in
+  elsewhere. A competing phone-app login is a possible cause. This is a
+  different notification from account removal; it is not a rate-limit message.
+- **Account notification / CGS0252:** the app handles this as an account removed.
+  Verify the account in the app. The probe does not delete or modify accounts.
 - **Panel offline / network error:** check that the normal app can reach your
   panel and that HAOS has outbound Internet access. No port forwarding is needed.
 - **Protocol compatibility check failed:** keep the exact sanitized error text;
@@ -57,3 +63,22 @@ Share whether the RF remote's changes appeared correctly, or share the error
 text. The probe excludes your device ID, username and password from its logs,
 but accessory records can reveal sensor information and event times. Redact
 those records before sharing.
+
+## Check whether the phone app replaces the probe's session
+
+Version 0.1.0 logged one combined error for `CGS0251` and `CGS0252`. An older log
+cannot tell us which of these arrived. Update to 0.1.1 for separate messages.
+
+1. Close the H4 phone app fully. Start the probe with `samples: 12` and
+   `interval: 10`, then use the RF remote for any normal mode changes during
+   the roughly two-minute window.
+2. If that run remains connected, start another run and open/log into the phone
+   app partway through it. Note whether `CGS0251` then appears in the probe log.
+3. If it does, this supports session replacement by the app. Stop the probe
+   after the test; repeatedly restarting it could displace the phone session.
+
+If the H4 app offers **Add family member / User management**, a separate
+authorized user for the add-on is a possible long-term solution. Whether this
+panel/service allows both accounts to stay connected still needs testing.
+The probe deliberately does not reconnect automatically in response to logout
+notifications or attempt to defeat the service's session policy.

@@ -79,8 +79,21 @@ implementing those event formats.
 
 ## Validation still needed
 
-1. On the user's own H4/account, confirm directory routing and successful login
-   with empty optional metadata, then obtain a well-formed status reply.
+Follow-up user testing has confirmed successful login and multiple well-formed
+status replies on one original-H4 installation. This supports the empty-metadata
+login path for that installation. The run stopped on a notification that 0.1.0
+combined into a single `CGS0251`/`CGS0252` error; its exact code was not retained.
+
+Further static tracing distinguishes those notifications: `BaojingFragment$1`
+routes `CGS0251` to `LoginActivity` with the login-elsewhere notice. The resource
+`0x7f0e0071` is named `danqianzhanghuzaiqitadifangdenglu` and its default text is
+"Your account has been logged in". `CGS0252` instead shows `0x7f0e0070`,
+"This account has been deleted". This establishes the app's interpretation,
+not the cause of the user's combined historical error. No rate-limit response
+is shown by that log. Version 0.1.1 preserves the recognized code in its output.
+
+1. Establish concurrent-session behavior with the phone app; do not respond to
+   logout notifications with automatic login loops.
 2. Compare mode reports while the user changes state with the RF remote. Check
    whether login affects the existing app session.
 3. Establish accessory/alarm meanings, notification behavior and reconnection

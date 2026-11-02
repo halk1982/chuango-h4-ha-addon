@@ -18,6 +18,14 @@ class AuthenticationError(ProtocolError):
     pass
 
 
+class SessionReplacedError(AuthenticationError):
+    """CGS0251: the app returns to login with its logged-in-elsewhere notice."""
+
+
+class AccountRemovedError(AuthenticationError):
+    """CGS0252: the app displays its account-deleted notice."""
+
+
 class PanelOfflineError(ProtocolError):
     pass
 
@@ -112,8 +120,10 @@ class Frame:
 def parse_frame(line: str) -> Frame:
     if line == "CGS01":
         raise PanelOfflineError("Server reports the panel offline")
-    if line.startswith(("CGS0251", "CGS0252")):
-        raise AuthenticationError("Session revoked or account removed; probe stopped")
+    if line.startswith("CGS0251"):
+        raise SessionReplacedError("CGS0251: the app handles this as an account logged in elsewhere")
+    if line.startswith("CGS0252"):
+        raise AccountRemovedError("CGS0252: the app handles this as an account removed")
     if len(line) < 11 or not line.startswith("CGS02"):
         raise ProtocolError("Unrecognized response header")
     command = line[5:7]

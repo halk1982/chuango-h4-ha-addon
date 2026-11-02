@@ -8,7 +8,10 @@ from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .client import StatusClient
-from .protocol import AuthenticationError, PanelOfflineError, ProtocolError
+from .protocol import (
+    AccountRemovedError, AuthenticationError, PanelOfflineError, ProtocolError,
+    SessionReplacedError,
+)
 
 
 def run(options):
@@ -61,6 +64,11 @@ def main(argv=None):
                        "interval": args.interval, "timezone": args.timezone}
         run(options)
         return 0
+    except SessionReplacedError as error:
+        print(f"Session ended: {error}. Another app login may have replaced this session. "
+              "Probe stopped; no automatic login retries.", file=sys.stderr)
+    except AccountRemovedError as error:
+        print(f"Account notification: {error}. Probe stopped; no automatic login retries.", file=sys.stderr)
     except AuthenticationError as error:
         print(f"Authentication failed: {error}. No automatic login retries.", file=sys.stderr)
     except PanelOfflineError:
