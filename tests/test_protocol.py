@@ -6,6 +6,7 @@ from h4.protocol import (
     SessionReplacedError, directory_request,
     forwarded_payload, handshake_request, heartbeat_request, login_request,
     parse_directory, parse_frame, parse_status, require_success, status_request,
+    CommandRejectedError, mode_request, require_mode_ack,
 )
 
 
@@ -83,6 +84,16 @@ class ProtocolTests(unittest.TestCase):
         for line in ("", "CGS0201", "CGC020155551", "CGS020100001", "CGS02xx55551"):
             with self.subTest(line=line), self.assertRaises(ProtocolError):
                 parse_frame(line)
+
+    def test_mode_commands_and_acknowledgements_from_static_trace(self):
+        self.assertEqual(mode_request('0'),b'CGC021055550003090\r\n')
+        self.assertEqual(mode_request('1'),b'CGC021055550003091\r\n')
+        self.assertEqual(mode_request('2'),b'CGC021055550003092\r\n')
+        with self.assertRaises(ValueError):mode_request('9')
+        require_mode_ack('091')
+        with self.assertRaises(CommandRejectedError):require_mode_ack('090')
+        for payload in ('09','091extra','20100'):
+            with self.subTest(payload=payload),self.assertRaises(ProtocolError):require_mode_ack(payload)
 
 
 if __name__ == "__main__":

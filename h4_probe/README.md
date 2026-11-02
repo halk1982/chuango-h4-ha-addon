@@ -1,9 +1,12 @@
-# Chuango H4 Status Probe (experimental)
+# Chuango H4 MQTT Bridge (experimental)
 
-Short, status-only compatibility test for the **original Chuango H4**.
-It queries the alarm service and logs the returned panel mode and accessory
-status codes. It cannot arm, disarm, trigger the siren, or change settings.
+Mode monitoring for the **original Chuango H4** using MQTT Discovery, plus a
+short probe mode and opt-in experimental arm-home, arm-away and disarm commands.
 
-Initial user testing has confirmed status reads. State transitions and session
-coexistence still need validation. MQTT and Home Assistant entities are
-not implemented yet. See the **Documentation** tab to configure the first run.
+RF and separate-account phone-app status changes have been user-validated in
+short runs. Physical commands, active-alarm state, individual sensor meanings,
+HomeKit and long-term stability still need validation.
+
+Existing users keep their settings and change `run_mode` from `probe` to `mqtt`
+for continuous monitoring. With HAOS Mosquitto, broker settings are automatic.
+Controls default to disabled. Read the **Documentation** tab before enabling.

@@ -1,100 +1,103 @@
-# Configure the first test
+# Start continuous MQTT monitoring
 
-This is an experimental status-only probe. Initial user testing has confirmed
-successful status reads; state transitions and concurrent sessions still need
-validation. It does not create Home Assistant entities. It runs briefly,
-logs the replies, then stops. It cannot send arm/disarm or settings commands.
+1. Keep the dedicated H4 account that worked in the probe. Keep your panel ID,
+   password, timezone and `allow_plaintext` setting.
+2. Set `run_mode` to **mqtt**, `interval` to **10**, and leave
+   `enable_controls` **disabled**.
+3. For the Mosquitto add-on on this HAOS machine, leave all three MQTT connection
+   text fields blank. Save and start the bridge.
+4. Open **Settings → Devices & services → MQTT → Chuango H4**. The mode,
+   accessory-count and command-result sensors appear through MQTT Discovery.
+   Ensure the Home Assistant MQTT integration is enabled.
 
-## Enter your settings
+MQTT mode runs until stopped. `samples` only limits probe mode. You can compare
+RF/phone-app changes with the mode sensor. Keep the watchdog disabled during
+initial testing. Authentication/session revocation stops rather than repeatedly
+competing with a phone login.
 
-Open the add-on's **Configuration** tab and fill in:
+## Options
 
-| Option | What to enter |
+| Option | Meaning |
 | --- | --- |
-| `device_id` | Your panel's device ID, as used when adding it to the app; check its label/QR information. Use the device identifier, not the model name H4 or a Wi-Fi address. |
-| `username` | Your existing H4 app username. |
-| `password` | Your existing H4 app password. |
-| `allow_plaintext` | Enable only after reading the transport limitation below. |
-| `samples` | Keep `6` for the first run. |
-| `interval` | Keep `10` seconds for the first run. |
-| `timezone` | Your local IANA timezone, for example `Europe/Athens`. |
-| `include_accessories` | Keep disabled for short status logs. Enable only when raw sensor records are needed for diagnosis. |
+| `run_mode` | `probe` for a short log-only test; `mqtt` for continuous HA integration. Defaults to probe after upgrading. |
+| `device_id` | The same panel ID that worked in the probe, not the model name or IP address. |
+| `username`, `password` | Dedicated authorized H4 app/family account for this panel. Enter only locally. |
+| `allow_plaintext` | Explicit acceptance of the app's unencrypted alarm TCP login. |
+| `interval` | Seconds between status queries, default 10; replies add some latency. |
+| `timezone` | Local IANA timezone, for example `Europe/Athens`. |
+| `enable_controls` | Disabled by default. Enables the experimental alarm entity and arm/home/disarm commands. |
+| `confirmation_timeout` | Seconds allowed for reading the requested state after a command, default 120. |
+| `reconnect_attempts` | Bounded retries for alarm network/offline failures, default 3. No retries for login/session rejection. |
+| `mqtt_host` | Empty for HAOS Mosquitto auto-discovery; set a hostname/IP for a different broker. |
+| `mqtt_port` | Manual broker port, default 1883. Ignored during auto-discovery. |
+| `mqtt_username`, `mqtt_password` | Manual broker credentials. Empty during HAOS auto-discovery. |
+| `mqtt_tls` | Certificate-verified TLS for a manually configured broker. Use its TLS port. |
+| `samples` | Probe only: number of replies before normal completion. |
+| `include_accessories` | Probe only: include raw sensor records. Leave off for compact logs. |
 
-Enter credentials only here, on your own Home Assistant installation. Do not
-send them through chat or commit them to GitHub. Click **Save**.
+MQTT auto-discovery reads the fixed local Supervisor endpoint and does not log
+its token, broker password or response. The alarm and MQTT passwords are separate.
 
-**Transport limitation:** the inspected app's alarm login path sends the app
-password over plaintext TCP. This probe reproduces that transport and refuses
-to connect until `allow_plaintext` is enabled. Support for TLS has not been
-established. Login may affect your existing app session; concurrent-session
-behavior and acceptance of empty optional push metadata are unverified.
+## Experimental controls
 
-## Run it
+Only after monitoring works, enable `enable_controls`, save and restart. An
+additional **Chuango H4 Alarm** entity appears. Use that entity for a deliberate
+first test of arm home, arm away or disarm. These functions use the legitimate
+account already configured; the add-on has no siren/panic or account-writing API.
 
-1. Open **Info**, click **Start**, then open **Logs**.
-2. Look for a JSON line containing `"mode": "disarmed"`, `"armed_away"`,
-   `"armed_home"`, or `"unknown"`. `mode_changed` is `null` for the first reply,
-   then `true` when the returned mode code differs from the previous reply.
-   It compares service replies; it does not independently verify the panel LED
-   or prove that a response is fresh. `accessory_count` is always included.
-3. For a controlled RF test, use `samples: 12` and `interval: 10`. Fully close
-   the phone app, then use your RF remote to select disarmed, home and disarmed,
-   holding each mode for at least 30 seconds. Check the panel LED and compare
-   the log. Quicker changes may occur between polls and be missed. You do not
-   need to trigger an alarm.
-4. After the configured samples the add-on logs normal completion and stops.
-   That is expected. Leave automatic start
-   and watchdog disabled. Click **Start** again for another short test.
+**Physical commands have not yet been user-validated.** They are implemented
+from static APK traces and tested against mock responses. The bridge sends once,
+requires an acknowledgement, then queries actual state. It never publishes the
+requested mode as if it had already happened. The command-result sensor reports
+pending, confirmed, rejected or not_confirmed. A disconnect may leave the action
+outcome unconfirmed; check the panel/app. The bridge never replays that action.
 
-Accessory state/alarm fields are raw codes, not yet verified contact/siren
-states. Errors do not produce an assumed armed or disarmed state.
+Stored retained commands and duplicates are ignored. Offline/stale/busy commands
+are rejected. Disabling controls removes the alarm entity's MQTT discovery
+configuration. Keep your broker accessible only to your trusted clients.
 
-## If something goes wrong
+After this entity is validated, select it in the existing HomeKit Bridge if you
+want HomeKit access. That path still needs testing. Active-alarm/triggered state
+and individual sensor meanings are not yet implemented; accessory count is
+reported without guessing sensor semantics.
 
-- **Invalid options:** check the three required fields, timezone and
-  `allow_plaintext` setting, then save again.
-- **Authentication failed:** verify the ID and app login details locally.
-  The probe stops without automatic login retries. Server-specific optional
-  metadata requirements remain a possibility.
-- **Session ended / CGS0251:** the app handles this as an account logged in
-  elsewhere. A competing phone-app login is a possible cause. This is a
-  different notification from account removal; it is not a rate-limit message.
-- **Account notification / CGS0252:** the app handles this as an account removed.
-  Verify the account in the app. The probe does not delete or modify accounts.
-- **Panel offline:** the service reported the panel offline.
-- **Network failure:** version 0.1.2 identifies the failing step and whether it
-  timed out, was closed/reset by the peer, or failed to connect/resolve. A status
-  timeout means a fresh expected status reply did not arrive before the
-  deadline. It does not establish spam blocking, an offline panel, or a session
-  restriction. Listed reply codes contain no message bodies. Check that HAOS
-  has outbound Internet access; no port forwarding is needed.
-- **Protocol compatibility check failed:** keep the exact sanitized error text;
-  your original H4 or its service may use a different response format.
+## Availability and reconnection
 
-Share whether the RF remote's changes appeared correctly, or share the error
-text. The probe excludes your device ID, username and password from its logs,
-but accessory records can reveal sensor information and event times. Redact
-those records before sharing.
+A failed status query marks entities unavailable. Normal state messages are not
+retained. Last Will marks an unexpectedly disconnected bridge offline. New status
+is required after reconnect before availability/controls are enabled. Mode sensor
+expiration adds a fallback freshness limit. These checks do not independently
+prove the vendor has no caching; compare with your panel during testing.
 
-## Check whether the phone app replaces the probe's session
+Transient cloud errors use increasing 30/60/120… second delays, limited by
+`reconnect_attempts`. Three stable readings reset that budget. The bridge stops
+on an unrecognized protocol response or explicit session/account/login rejection.
+MQTT broker reconnection is independent and does not repeat cloud commands.
 
-Version 0.1.0 logged one combined error for `CGS0251` and `CGS0252`. An older log
-cannot tell us which of these arrived. Update to 0.1.1 for separate messages.
+## Keep using the short probe
 
-1. Close the H4 phone app fully. Start the probe with `samples: 12` and
-   `interval: 10`, then use the RF remote for any normal mode changes during
-   the roughly two-minute window.
-2. If that run remains connected, start another run and open/log into the phone
-   app partway through it. Note whether `CGS0251` then appears in the probe log.
-3. If it does, this supports session replacement by the app. Stop the probe
-   after the test; repeatedly restarting it could displace the phone session.
+Set `run_mode: probe` for the previous diagnostic behavior. Use `samples: 12`
+and `interval: 10`, close the phone app fully and hold RF-selected disarmed,
+home, then disarmed for 30 seconds each. Compare the physical LED with the logs.
+`mode_changed` compares received values, not the physical LED independently.
+Normal sample completion is logged explicitly.
 
-If the H4 app offers **Add family member / User management**, a separate
-authorized user for the add-on is a possible long-term solution. Whether this
-panel/service allows both accounts to stay connected still needs testing.
-Successful login with that user alone does not establish simultaneous access.
-If the RF-only test works, repeat once with the phone app opening partway
-through. Record the phone behavior and the probe's last error. Avoid continuously
-restarting either client to compete for a session.
-The probe deliberately does not reconnect automatically in response to logout
-notifications or attempt to defeat the service's session policy.
+## Errors
+
+- **CGS0251 / Session ended:** the app handles this as an account logged in
+  elsewhere. Keep distinct phone and add-on users. Do not enable repeated login
+  restarts to compete for a session.
+- **CGS0252 / Account notification:** the app handles this as an account removed.
+  The bridge never deletes accounts. Verify it in the app.
+- **Network failure:** the message identifies timeout, peer close/reset or other
+  transport error, the failing step and safe reply codes. It does not prove spam
+  blocking or explain the vendor's session policy.
+- **Cannot obtain HAOS MQTT settings:** start Mosquitto, verify its service is
+  configured and restart the bridge. Outside HAOS, use manual MQTT settings.
+- **MQTT connection rejected:** verify the manual broker credentials/permissions,
+  or the configured Mosquitto service for auto-discovery.
+
+The legacy alarm login sends its password over plaintext TCP. `allow_plaintext`
+remains necessary for this path. MQTT TLS does not encrypt that separate alarm
+connection. Share only sanitized logs; probe accessory details can reveal sensor
+information and event times.

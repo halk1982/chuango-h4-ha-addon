@@ -1,8 +1,4 @@
-"""Protocol reconstructed from H4 Smarthome 5.5.0, not live-device validated.
-
-Only directory lookup, handshake, login, heartbeat and status query builders are
-provided. There is deliberately no command or configuration-writing API.
-"""
+"""H4 5.5.0 protocol. Mode reads have user validation; commands are experimental."""
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 
@@ -27,6 +23,10 @@ class AccountRemovedError(AuthenticationError):
 
 
 class PanelOfflineError(ProtocolError):
+    pass
+
+
+class CommandRejectedError(ProtocolError):
     pass
 
 
@@ -78,6 +78,19 @@ def status_request(now: datetime) -> bytes:
     # GF.getCurrDate(): local yyyyMMddHHmmss + Monday=1, ..., Sunday=7.
     payload = "20" + now.strftime("%Y%m%d%H%M%S") + str(now.isoweekday())
     return _request("10", _lp(payload, 4))
+
+
+def mode_request(mode_code: str) -> bytes:
+    if mode_code not in MODES:
+        raise ValueError("Unsupported panel mode")
+    return _request("10", _lp("09" + mode_code, 4))
+
+
+def require_mode_ack(payload: str) -> None:
+    if payload == "090":
+        raise CommandRejectedError("Panel rejected the mode command")
+    if payload != "091":
+        raise ProtocolError("Unsupported mode acknowledgement; command outcome unconfirmed")
 
 
 def _number(value: str) -> int:

@@ -257,6 +257,23 @@ class ClientTests(unittest.TestCase):
                      "allow_plaintext":True, "samples":1, "include_accessories":True})
             self.assertEqual(json.loads(output.getvalue())['accessories'], [])
 
+    def test_mode_command_is_sent_once_and_followed_by_actual_status(self):
+        def session(conn,stream,requests):
+            handshake(conn,stream,requests)
+            requests.append(stream.readline())
+            self.assertEqual(requests[-1],b'CGC021055550003092\r\n')
+            conn.sendall(b'CGS0210555510003091\r\n')
+            requests.append(stream.readline())
+            conn.sendall(b'CGS021055551000520100\r\n')
+        with Server(session) as server:
+            c=client(endpoint=server.endpoint)
+            try:
+                c.connect();c.change_mode('2')
+                # Even an accepted home command cannot override a disarmed reply.
+                self.assertEqual(c.status(datetime(2026,11,2)).mode,'disarmed')
+            finally:c.close()
+            self.assertEqual(len(server.requests),4)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -9,6 +9,7 @@ from .protocol import (
     ProtocolError, forwarded_payload, directory_request, handshake_request,
     heartbeat_request, login_request, parse_directory, parse_frame, parse_status,
     require_success, status_request,
+    mode_request, require_mode_ack,
 )
 
 DIRECTORY = ("www.4g-alarm.com", 30010)
@@ -154,5 +155,22 @@ class StatusClient:
         deadline = time.monotonic() + seconds
         while (remaining := deadline - time.monotonic()) > 0:
             time.sleep(min(10, remaining))
-            with self._transport("heartbeat write"):
-                self.wire.write(heartbeat_request())
+            self.heartbeat()
+
+    def heartbeat(self):
+        with self._transport("heartbeat write"):
+            self.wire.write(heartbeat_request())
+
+    def change_mode(self, mode_code):
+        """Send once, require the app's 09 acknowledgement; caller must read state."""
+        packet = mode_request(mode_code)
+        with self._transport("mode command"):
+            self.wire.write(packet)
+            deadline = time.monotonic() + self.timeout
+            while True:
+                frame = self._read_frame(deadline)
+                if frame.command == "10":
+                    payload = forwarded_payload(frame)
+                    if payload.startswith("09"):
+                        require_mode_ack(payload)
+                        return

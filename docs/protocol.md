@@ -32,7 +32,7 @@ All class names below are under `cn.chuango.h4` unless otherwise stated.
 | Manual status refresh uses device command 20 plus local timestamp and weekday | `fragment.BaojingFragment$3.onRefresh`, `0x202998` → `DSend.ds_20`, `0x20ea88`; `GF.getCurrDate`, `0x215a28` | High for app request; firmware-side effects of timestamp not established |
 | Status reply contains mode, accessory count, fixed-width records | `DAccept.da_20`, `0x20d9c0` → `ObjAlarmState.setZhujiMode/setListAlarm` | High for app parser; no real panel record yet |
 | Modes 0/1/2 correspond to away/disarmed/home | `BaojingFragment.choosewhich`, `0x203958`; `view.LinearThree.init`; `cn.chuango.chuangoh4.R$drawable` labels `icon_arm/icon_home/icon_disarm` | High for UI mapping; original H4 behavior unverified |
-| Mode changes use device command 09 and mode digit | `BaojingFragment$2.onIndicate`, `0x20276c`; `DSend.ds_09`, `0x20e7a8` | Not implemented or transmitted by the probe |
+| Mode changes use device command 09 and mode digit | `BaojingFragment$2.onIndicate`, `0x20276c`; `DSend.ds_09`, `0x20e7a8` | Opt-in MQTT controls from 0.2.0; never sent by probe mode; physical execution unverified |
 
 The app also contains ARM/ARM64 native camera libraries including TUTK IOTC.
 Their presence does not establish that the alarm path requires those libraries,
@@ -78,6 +78,20 @@ notification paths; the probe currently queries fresh status instead of
 implementing those event formats.
 
 ## Validation still needed
+
+Subsequent user testing supplied two complete 12-sample runs. The user reports
+RF control in the first and phone-app control on a different account in the
+second. Both logs show all three mode codes and normal completion. This supports
+original-H4 mode mapping and short-term coexistence on that installation. It does
+not establish indefinite concurrent sessions or identify the cause of earlier
+disconnects; 0.1.2 changed diagnostics rather than the wire protocol.
+
+Version 0.2.0 implements opt-in commands using `DSend.ds_09` and the response
+check in `DAccept.da_09`, code item `0x20cf58`: device payload `091` is an accepted
+acknowledgement, `090` is rejected. Acknowledgement is not state confirmation.
+The worker reads actual mode until a deadline, never optimistically changes
+state and never repeats an uncertain action after a reconnect. These command
+paths are mock-tested; no physical command has been executed by the agent.
 
 Follow-up user testing has confirmed successful login and multiple well-formed
 status replies on one original-H4 installation. This supports the empty-metadata

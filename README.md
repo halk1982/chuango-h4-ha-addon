@@ -1,137 +1,120 @@
-# Chuango H4 Home Assistant project
+# Chuango H4 Home Assistant bridge
 
-Experimental interoperability work for the **original Chuango H4**. The current
-deliverable is a **status-only compatibility probe**, available as an HAOS
-add-on or a Python command. Initial user testing has confirmed status reads;
-mode transitions, alarm behavior and concurrent app sessions remain under test.
+Experimental integration for the **original Chuango H4**, using its existing
+cloud service and a dedicated app/family account. User testing has confirmed
+RF and phone-app changes between disarmed, home and away in two complete short
+runs. This establishes mode reading on that installation, not every firmware or
+long-term connection reliability.
 
-The add-on declares amd64 and aarch64 support; the container has been built and
-tested on amd64 only. User feedback covers an initial HAOS status-read run.
+Version **0.2.0** adds a continuous MQTT bridge. The existing short probe remains
+available and is still the default after an update. The add-on keeps its original
+slug, so existing users update their current installation.
 
-It sends directory lookup, handshake, login, heartbeat and status-refresh
-requests reconstructed from H4 Smarthome 5.5.0. It has no arm, disarm, siren,
-account-management or settings-writing commands. No APK or vendor library is
-needed at runtime. MQTT and HomeKit integration are not implemented yet.
+## Update and start MQTT monitoring
 
-## Install from GitHub on HAOS
+1. In the Add-on/App Store, select **⋮ → Check for updates**, open your installed
+   add-on and update to **0.2.0**. Its display name is now **Chuango H4 MQTT Bridge
+   (experimental)**.
+2. Keep your existing panel ID, dedicated account, password, timezone and
+   `allow_plaintext` setting. Set `run_mode: mqtt`, `interval: 10` and
+   `enable_controls: false`.
+3. With the **Mosquitto add-on in HAOS**, leave `mqtt_host`, `mqtt_username` and
+   `mqtt_password` empty. The bridge obtains the broker connection settings
+   through the local Supervisor service API. Those credentials are never logged.
+4. Save and start. In **Settings → Devices & services → MQTT**, find the
+   **Chuango H4** device. It has a mode sensor, accessory-count sensor and
+   command-result diagnostic. Home Assistant's MQTT integration must be enabled.
+5. Compare the mode sensor with normal RF/app changes. MQTT mode runs
+   continuously; `samples` and `include_accessories` apply only to probe mode.
 
-No ZIP download, terminal or manual file copying is needed for a public
-repository. The standard Add-on Store installer must be able to fetch the
-repository without signing into GitHub; private repositories need a different
-installation route.
+A failed alarm query marks MQTT entities unavailable. Alarm state messages are
+not retained. MQTT Last Will marks a crashed/disconnected bridge offline. The
+bridge publishes availability only after receiving and publishing a new status.
+Unknown mode codes remain unknown. Sensor expiration is an additional freshness
+limit; it does not prove that the vendor itself has no caching.
 
-1. Open Home Assistant, then **Settings → Add-ons → Add-on Store**.
-2. Open the **⋮** menu at the top right and choose **Repositories**.
-3. Paste this URL, click **Add**, and close the dialog:
+Keep the watchdog off while testing. After a longer successful MQTT run, start
+on boot can be enabled if desired. Authentication/session revocation stops the
+bridge instead of starting a login loop. Transient network/offline errors use
+bounded retries after 30, 60, 120… seconds; the budget resets after three stable
+status reads. Default: three retry attempts. MQTT broker connections reconnect
+independently without creating additional alarm logins.
 
-   ```text
-   https://github.com/halk1982/chuango-h4-ha-addon
-   ```
+## Experimental arm/disarm controls
 
-4. Find **Chuango H4 Status Probe (experimental)** under **Chuango H4
-   experiments**, open it and click **Install**. If it is not visible yet,
-   use **⋮ → Check for updates** and refresh the page. The first installation
-   builds the image on your HAOS machine and needs access to Docker Hub.
-5. Open the add-on's **Documentation** tab for the configuration and first-test
-   guide, or follow the instructions below.
+After mode monitoring works, you can explicitly set `enable_controls: true`,
+save and restart. This creates an MQTT alarm-control-panel entity supporting
+**arm home, arm away and disarm**. Disabling controls removes its discovery
+configuration while preserving the monitoring sensors.
 
-On newer Home Assistant versions the same menus may be named **Apps** and
-**App Store**.
+**Physical command execution is not yet user-validated.** Commands and their
+acknowledgement format come from the APK and have mock-server tests. A command
+is sent once, then the bridge reads actual panel state. An acknowledgement alone
+never sets the reported mode. The command-result diagnostic changes from pending
+to confirmed, rejected or not_confirmed. Default confirmation deadline: 120
+seconds, allowing for panel exit delays. Uncertain/failed commands are never
+replayed after reconnect.
 
-## Configure and run the first test
+Stored retained commands, duplicate deliveries, unsupported commands and
+commands received while offline, stale or busy are ignored. MQTT access should
+remain restricted to your trusted Home Assistant setup. No siren, panic, account
+or settings-write commands are provided. Triggered-alarm state and individual
+sensor meanings have not yet been validated and are not inferred from raw codes.
 
-1. Open the add-on's **Configuration** tab. Enter the device ID from your H4's
-   label/QR information and the username/password used by its app. Enter them
-   locally; do not send them through chat or commit them to Git. Keep six
-   samples and a ten-second interval for the first run. Use your local timezone.
-2. Read the transport limitation below. If acceptable, enable
-   `allow_plaintext`, then click **Save**.
-3. Return to **Info**, click **Start**, and open **Logs**. Leave automatic start
-   and watchdog disabled; this is a short diagnostic run.
-4. Check that the logged `mode` matches the app. During the sample window you
-   can use your normal RF remote to change mode and check the next sample.
-   There is no need to trigger an alarm. The probe stops after the configured
-   samples, or immediately on authentication/protocol/network failure.
+Once the alarm entity is tested, it can be selected in your existing HomeKit
+Bridge. HomeKit operation remains to be checked on your installation.
 
-If the repository cannot be added, check its visibility and the error shown by
-Home Assistant. If the add-on fails to install, share the build error. This
-version declares amd64 and aarch64; a 32-bit armv7 host is not supported.
+## First installation
 
-Expected output is JSON with `mode` (`disarmed`, `armed_away`, `armed_home`, or
-`unknown`), `mode_code`, `mode_changed`, `accessory_count`, observation time and
-sample number. `mode_changed` is `null` for the first sample and then compares
-the returned code with the previous reply. Raw accessory records require
-`include_accessories: true` (or `--include-accessories` on the command line).
-These are service-reported values, not an independent check of the physical
-panel. Hold RF-selected modes for 30 seconds to compare them with the logs.
-The probe does not create HA entities. Accessory state/alarm fields retain their
-raw codes until their live meanings are verified. A missing response produces
-an error, never a guessed or cached disarmed state. Stop the add-on at any time.
+For a repository Home Assistant can fetch without signing in, add this URL in
+**Settings → Add-ons/Apps → Store → ⋮ → Repositories**:
 
-**Transport limitation:** the inspected alarm login path uses plaintext TCP,
-including the app password. This probe reproduces that path and refuses to
-connect until `allow_plaintext` is explicitly enabled. TLS support has not been
-established; the probe does not disable any TLS verification. Login may affect
-the existing app session; concurrent-session behavior remains unverified. Empty
-optional push metadata may also be rejected by the server. No automated login
-retries or account modifications are performed.
-
-If the test fails, share only the sanitized error text. If it works, share
-whether changing mode with the RF remote was reflected correctly. Device IDs,
-usernames and passwords are excluded from probe output. Accessory records can
-still disclose sensor information and event times; redact them before sharing.
-
-If opening the phone app ends the probe session, see the
-[session test and notification guide](h4_probe/DOCS.md#check-whether-the-phone-app-replaces-the-probes-session).
-Version 0.1.1 distinguishes the app's logged-in-elsewhere notification (`CGS0251`)
-from its account-removed notification (`CGS0252`). Version 0.1.0 combined them,
-so its existing error text cannot identify which one arrived. A logout is not
-evidence of rate limiting. The probe stops rather than automatically competing
-with the phone app for a session.
-
-## Alternative local installation
-
-If you intentionally keep the repository private, copy the complete `h4_probe`
-directory to HAOS's `/addons` directory through your existing Samba or SSH
-access. The result must include `/addons/h4_probe/config.yaml` and
-`/addons/h4_probe/h4/`. Refresh the Add-on Store and install it under local
-add-ons, then follow the same configuration instructions. Do not put GitHub
-tokens into repository URLs.
-
-## Run on a computer instead
-
-Python 3.12 with IANA timezone data is sufficient; there are no Python package
-dependencies. From the repository root:
-
-```sh
-PYTHONPATH=h4_probe python3 -m h4 --allow-plaintext --samples 6 --interval 10
+```text
+https://github.com/halk1982/chuango-h4-ha-addon
 ```
 
-The command prompts for the ID and username, and hides password entry. It never
-accepts credentials in command-line arguments. Alternatively, pass `--options`
-with a private JSON file matching the add-on option names. Keep that file
-outside the checkout or named `options.json` (ignored by Git), with permissions
-restricted to its owner. Default timezone: `Europe/Athens`.
+Install **Chuango H4 MQTT Bridge (experimental)**. amd64 and aarch64 are declared;
+only amd64 container builds have been verified here. A 32-bit armv7 host is not
+supported. Private repositories can instead be copied to `/addons/h4_probe`
+through your existing local Samba/SSH access. Do not put GitHub tokens in URLs.
 
-## Development validation
+The **Documentation** tab explains all options and the short probe test.
 
-Use the existing checkout; a cloud task is already isolated and needs no extra
-Git worktree. From this directory:
+## Transport and scope
+
+The inspected app's alarm login path uses **plaintext TCP**, including its
+password. `allow_plaintext` remains required. This is separate from MQTT TLS,
+which is configurable and verifies certificates. No app APK or vendor binary is
+needed at runtime. The bridge does not claim a local/LAN alarm API.
+
+Use a dedicated authorized app/family user for the same panel. Separate accounts
+coexisted in the user's short test; other connection/session limits remain
+possible. Keep credentials in your HAOS configuration, never chat or GitHub.
+Logs exclude the panel ID, usernames, passwords and response bodies.
+
+## Development
+
+Use the existing isolated checkout; no extra Git worktree is needed.
 
 ```sh
-PYTHONPATH=h4_probe python3 -m unittest discover -s tests -v
-docker build -t chuango-h4-probe:dev h4_probe
+python3 -m venv .venv
+.venv/bin/python -m pip install --require-hashes -r h4_probe/requirements.txt
+PYTHONPATH=h4_probe .venv/bin/python -m unittest discover -s tests -v
+docker build -t chuango-h4-bridge:dev h4_probe
 ```
 
-Tests use synthetic protocol records and real loopback mock servers. They do
-not contact Chuango, log into an account, or communicate with a panel. Passing
-them validates the implementation against the static interpretation, not live
-compatibility. See [protocol notes](docs/protocol.md) for evidence and limits.
+The real-broker tests are opt-in: point `MQTT_TEST_PORT` at an isolated local
+Mosquitto listener before running the suite. They verify discovery, fresh-state
+availability, Last Will and no retained-command replay. Other tests use loopback
+mock alarm servers; none contact the vendor or a physical panel.
 
-## Following the compatibility check
+For a short interactive probe with Python 3.12 and timezone data (no MQTT library
+needed for probe mode):
 
-The intended integration is an HAOS add-on publishing confirmed state using
-MQTT Discovery. Confirm original-H4 status first, then validate command
-acknowledgements and state confirmation before exposing arm/disarm controls.
-Connection loss must mark entities unavailable. Alarm/sensor code meanings,
-push events, reconnection and concurrent app sessions still need validation.
+```sh
+PYTHONPATH=h4_probe python3 -m h4 --allow-plaintext --samples 12 --interval 10
+```
+
+For MQTT outside HAOS, use `--options` with a private JSON file containing
+`run_mode: "mqtt"` and manual MQTT connection settings. See
+[protocol evidence and limits](docs/protocol.md).

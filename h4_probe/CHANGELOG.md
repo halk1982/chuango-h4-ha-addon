@@ -1,3 +1,18 @@
+# 0.2.0
+
+- Add continuous MQTT mode with Home Assistant discovery and automatic HAOS
+  Mosquitto service settings. Existing installations default to short probe mode.
+- Publish mode/accessory-count sensors and availability; normal state messages
+  are not retained. Last Will and fresh-state gating handle broker/bridge loss.
+- Add opt-in experimental arm-home, arm-away and disarm controls. Send once,
+  validate the acknowledgement and confirm through actual status reads.
+- Ignore stored retained/duplicate, stale/offline and busy commands; do not
+  replay uncertain actions after reconnect.
+- Add bounded cloud reconnect backoff; explicit authentication/session failures
+  stop without login loops. Keep broker reconnect independent of alarm logins.
+- Checksum-pin paho-mqtt 2.1.0. Validate with mock alarm servers and an isolated
+  real Mosquitto broker. Physical commands and HomeKit remain unverified.
+
 # 0.1.2
 
 - Distinguish transport timeouts, peer-closed connections, resets, refused

@@ -1,15 +1,20 @@
-name: Chuango H4 Status Probe (experimental)
-version: "0.1.2"
+name: Chuango H4 MQTT Bridge (experimental)
+version: "0.2.0"
 slug: chuango_h4_probe
-description: Experimental status-only compatibility test for the original Chuango H4
+description: Original Chuango H4 status via MQTT, with opt-in experimental controls
 url: https://github.com/halk1982/chuango-h4-ha-addon
 arch:
   - amd64
   - aarch64
-startup: once
+startup: application
 boot: manual
 init: false
+hassio_api: true
+services:
+  - mqtt:want
+timeout: 30
 options:
+  run_mode: probe
   device_id: ""
   username: ""
   password: ""
@@ -18,7 +23,16 @@ options:
   interval: 10
   timezone: Europe/Athens
   include_accessories: false
+  enable_controls: false
+  confirmation_timeout: 120
+  reconnect_attempts: 3
+  mqtt_host: ""
+  mqtt_port: 1883
+  mqtt_username: ""
+  mqtt_password: ""
+  mqtt_tls: false
 schema:
+  run_mode: list(probe|mqtt)
   device_id: str
   username: str
   password: password
@@ -27,3 +41,11 @@ schema:
   interval: int(5,300)
   timezone: str
   include_accessories: bool
+  enable_controls: bool
+  confirmation_timeout: int(15,300)
+  reconnect_attempts: int(0,5)
+  mqtt_host: str?
+  mqtt_port: port
+  mqtt_username: str?
+  mqtt_password: password?
+  mqtt_tls: bool

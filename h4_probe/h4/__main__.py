@@ -2,12 +2,14 @@
 import argparse
 import getpass
 import json
+import logging
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .client import NetworkError, StatusClient
+from .errors import MQTTError
 from .protocol import (
     AccountRemovedError, AuthenticationError, PanelOfflineError, ProtocolError,
     SessionReplacedError,
@@ -74,7 +76,15 @@ def main(argv=None):
                        "allow_plaintext": True, "samples": args.samples,
                        "interval": args.interval, "timezone": args.timezone,
                        "include_accessories": args.include_accessories}
-        run(options)
+        run_mode = options.get("run_mode","probe")
+        if run_mode == "mqtt":
+            from .bridge import run_bridge
+            logging.basicConfig(level=logging.INFO,format="%(asctime)s %(levelname)s %(message)s")
+            run_bridge(options)
+        elif run_mode == "probe":
+            run(options)
+        else:
+            raise ValueError("Unsupported run mode")
         return 0
     except SessionReplacedError as error:
         print(f"Session ended: {error}. Another app login may have replaced this session. "
@@ -88,6 +98,8 @@ def main(argv=None):
     except NetworkError as error:
         print(f"Network failure: {error}. No new status confirmed; "
               "probe stopped without automatic login retries.", file=sys.stderr)
+    except MQTTError as error:
+        print(f"MQTT failure: {error}. Check that Mosquitto is running and MQTT is configured.",file=sys.stderr)
     except ProtocolError as error:
         print(f"Protocol compatibility check failed: {error}. No status asserted.", file=sys.stderr)
     except (OSError, TimeoutError):
