@@ -58,7 +58,12 @@ Home Assistant. If the add-on fails to install, share the build error. This
 version declares amd64 and aarch64; a 32-bit armv7 host is not supported.
 
 Expected output is JSON with `mode` (`disarmed`, `armed_away`, `armed_home`, or
-`unknown`), `mode_code`, accessory records, observation time and sample number.
+`unknown`), `mode_code`, `mode_changed`, `accessory_count`, observation time and
+sample number. `mode_changed` is `null` for the first sample and then compares
+the returned code with the previous reply. Raw accessory records require
+`include_accessories: true` (or `--include-accessories` on the command line).
+These are service-reported values, not an independent check of the physical
+panel. Hold RF-selected modes for 30 seconds to compare them with the logs.
 The probe does not create HA entities. Accessory state/alarm fields retain their
 raw codes until their live meanings are verified. A missing response produces
 an error, never a guessed or cached disarmed state. Stop the add-on at any time.

@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from .client import StatusClient
+from .client import NetworkError, StatusClient
 from .protocol import (
     AccountRemovedError, AuthenticationError, PanelOfflineError, ProtocolError,
     SessionReplacedError,
@@ -23,16 +23,25 @@ def run(options):
         raise ValueError("interval must be an integer from 5 to 300")
     if type(options.get("allow_plaintext", False)) is not bool:
         raise ValueError("allow_plaintext must be a boolean")
+    include_accessories = options.get("include_accessories", False)
+    if type(include_accessories) is not bool:
+        raise ValueError("include_accessories must be a boolean")
     zone = ZoneInfo(options.get("timezone", "Europe/Athens"))
     client = StatusClient(options.get("device_id", ""), options.get("username", ""),
                           options.get("password", ""),
                           allow_plaintext=options.get("allow_plaintext", False))
-    print("Experimental H4 status probe: login and status queries only; live compatibility unverified.", file=sys.stderr, flush=True)
+    print("Experimental H4 status probe: login and status queries only; no arm/disarm commands.", file=sys.stderr, flush=True)
+    previous_mode_code = None
     try:
         client.connect()
         for i in range(samples):
             status = client.status(datetime.now(zone))
             output = status.as_dict()
+            output["accessory_count"] = len(status.accessories)
+            output["mode_changed"] = None if previous_mode_code is None else status.mode_code != previous_mode_code
+            previous_mode_code = status.mode_code
+            if not include_accessories:
+                del output["accessories"]
             output["observed_at"] = datetime.now(timezone.utc).isoformat()
             output["sample"] = i + 1
             print(json.dumps(output), flush=True)
@@ -40,6 +49,7 @@ def run(options):
                 client.wait(interval)
     finally:
         client.close()
+    print(f"Probe completed normally after {samples} samples.", file=sys.stderr, flush=True)
 
 
 def main(argv=None):
@@ -49,6 +59,7 @@ def main(argv=None):
     parser.add_argument("--samples", type=int, default=1)
     parser.add_argument("--interval", type=int, default=10)
     parser.add_argument("--timezone", default="Europe/Athens")
+    parser.add_argument("--include-accessories", action="store_true", help="Include raw accessory records in logs")
     args = parser.parse_args(argv)
     try:
         if args.options:
@@ -61,7 +72,8 @@ def main(argv=None):
             options = {"device_id": input("Panel device ID: "), "username": input("App username: "),
                        "password": getpass.getpass("App password: "),
                        "allow_plaintext": True, "samples": args.samples,
-                       "interval": args.interval, "timezone": args.timezone}
+                       "interval": args.interval, "timezone": args.timezone,
+                       "include_accessories": args.include_accessories}
         run(options)
         return 0
     except SessionReplacedError as error:
@@ -73,6 +85,9 @@ def main(argv=None):
         print(f"Authentication failed: {error}. No automatic login retries.", file=sys.stderr)
     except PanelOfflineError:
         print("Panel offline according to server. No status asserted.", file=sys.stderr)
+    except NetworkError as error:
+        print(f"Network failure: {error}. No new status confirmed; "
+              "probe stopped without automatic login retries.", file=sys.stderr)
     except ProtocolError as error:
         print(f"Protocol compatibility check failed: {error}. No status asserted.", file=sys.stderr)
     except (OSError, TimeoutError):

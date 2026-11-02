@@ -1,5 +1,5 @@
 name: Chuango H4 Status Probe (experimental)
-version: "0.1.1"
+version: "0.1.2"
 slug: chuango_h4_probe
 description: Experimental status-only compatibility test for the original Chuango H4
 url: https://github.com/halk1982/chuango-h4-ha-addon
@@ -17,6 +17,7 @@ options:
   samples: 6
   interval: 10
   timezone: Europe/Athens
+  include_accessories: false
 schema:
   device_id: str
   username: str
@@ -25,3 +26,4 @@ schema:
   samples: int(1,300)
   interval: int(5,300)
   timezone: str
+  include_accessories: bool

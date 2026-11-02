@@ -1,6 +1,8 @@
 """Bounded status-only sessions. No live endpoints are contacted on import."""
 import socket
 import time
+from collections import Counter
+from contextlib import contextmanager
 from datetime import datetime
 
 from .protocol import (
@@ -11,6 +13,10 @@ from .protocol import (
 
 DIRECTORY = ("www.4g-alarm.com", 30010)
 MAX_LINE = 65536
+
+
+class NetworkError(Exception):
+    """Safe transport diagnostics: no endpoints, credentials or response bodies."""
 
 
 class Wire:
@@ -55,6 +61,38 @@ class StatusClient:
         self._lookup = directory_request(device_id)
         self.directory, self.endpoint, self.timeout = directory, endpoint, timeout
         self.wire = None
+        self._reply_counts = Counter()
+
+    @contextmanager
+    def _transport(self, phase):
+        self._reply_counts.clear()
+        try:
+            yield
+        except OSError as error:
+            if isinstance(error, TimeoutError):
+                reason = "timed out"
+            elif isinstance(error, ConnectionResetError):
+                reason = "connection reset by peer"
+            elif isinstance(error, BrokenPipeError):
+                reason = "connection no longer accepts writes"
+            elif isinstance(error, ConnectionRefusedError):
+                reason = "connection refused"
+            elif isinstance(error, socket.gaierror):
+                reason = "DNS lookup failed"
+            elif isinstance(error, ConnectionError):
+                reason = "connection closed by peer"
+            else:
+                reason = "socket error"
+                if isinstance(error.errno, int):
+                    reason += f" (errno {error.errno})"
+            summary = ", ".join(f"{code} x{count}" for code, count in self._reply_counts.most_common(5))
+            replies = f"; reply codes seen: {summary}" if summary else "; no reply decoded during this step"
+            raise NetworkError(f"{phase}: {reason}{replies}") from None
+
+    def _read_frame(self, deadline):
+        frame = parse_frame(self.wire.read(deadline))
+        self._reply_counts["CGS02" + frame.command] += 1
+        return frame
 
     def close(self):
         if self.wire is not None:
@@ -64,7 +102,7 @@ class StatusClient:
     def _expect(self, command):
         deadline = time.monotonic() + self.timeout
         while True:
-            frame = parse_frame(self.wire.read(deadline))
+            frame = self._read_frame(deadline)
             if frame.command == command:
                 return frame
             # Heartbeats and unsolicited notifications must not satisfy a
@@ -74,20 +112,25 @@ class StatusClient:
         self.close()
         endpoint = self.endpoint
         if endpoint is None:
-            directory = Wire(self.directory, self.timeout)
+            with self._transport("directory connection"):
+                directory = Wire(self.directory, self.timeout)
             try:
-                directory.write(self._lookup)
-                endpoint = parse_directory(directory.read(time.monotonic() + self.timeout))
+                with self._transport("directory lookup"):
+                    directory.write(self._lookup)
+                    endpoint = parse_directory(directory.read(time.monotonic() + self.timeout))
             finally:
                 directory.close()
-        self.wire = Wire(endpoint, self.timeout)
+        with self._transport("alarm server connection"):
+            self.wire = Wire(endpoint, self.timeout)
         try:
-            self.wire.write(handshake_request())
-            handshake = self._expect("01")
-            if require_success(handshake):
-                raise ProtocolError("Unexpected handshake response length")
-            self.wire.write(self._login)
-            require_success(self._expect("04"))
+            with self._transport("handshake"):
+                self.wire.write(handshake_request())
+                handshake = self._expect("01")
+                if require_success(handshake):
+                    raise ProtocolError("Unexpected handshake response length")
+            with self._transport("login response"):
+                self.wire.write(self._login)
+                require_success(self._expect("04"))
         except BaseException:
             self.close()
             raise
@@ -95,17 +138,21 @@ class StatusClient:
     def status(self, now: datetime):
         if self.wire is None:
             raise RuntimeError("Client is not connected")
-        self.wire.write(status_request(now))
-        deadline = time.monotonic() + self.timeout
-        while True:
-            frame = parse_frame(self.wire.read(deadline))
-            if frame.command == "10":
-                payload = forwarded_payload(frame)
-                if payload.startswith("20"):
-                    return parse_status(payload)
+        with self._transport("status query"):
+            self.wire.write(status_request(now))
+            deadline = time.monotonic() + self.timeout
+            while True:
+                frame = self._read_frame(deadline)
+                if frame.command == "10":
+                    payload = forwarded_payload(frame)
+                    if len(payload) >= 2 and payload[:2].isascii() and payload[:2].isdecimal():
+                        self._reply_counts["device " + payload[:2]] += 1
+                    if payload.startswith("20"):
+                        return parse_status(payload)
 
     def wait(self, seconds):
         deadline = time.monotonic() + seconds
         while (remaining := deadline - time.monotonic()) > 0:
             time.sleep(min(10, remaining))
-            self.wire.write(heartbeat_request())
+            with self._transport("heartbeat write"):
+                self.wire.write(heartbeat_request())

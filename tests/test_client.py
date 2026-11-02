@@ -10,7 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
 
-from h4.client import MAX_LINE, StatusClient, Wire
+from h4.client import MAX_LINE, NetworkError, StatusClient, Wire
 from h4.protocol import AuthenticationError, PanelOfflineError, ProtocolError
 from h4.__main__ import main, run
 
@@ -181,6 +181,81 @@ class ClientTests(unittest.TestCase):
                     for secret in ("PANEL0001", "owner123", "secret456"):
                         self.assertNotIn(secret, output.getvalue()+errors.getvalue())
                     self.assertEqual(len(server.requests), 4)
+
+    def test_timeout_reports_phase_and_safe_reply_codes_without_retry(self):
+        def session(conn, stream, requests):
+            handshake(conn, stream, requests)
+            requests.append(stream.readline())
+            conn.sendall(b"CGS020255551\r\n")
+            # A heartbeat is not a fresh panel status. Wait for client timeout
+            # and close, rather than accepting another login/query.
+            self.assertEqual(stream.readline(), b"")
+        with Server(session) as server:
+            c = StatusClient("PANEL0001", "owner123", "secret456", allow_plaintext=True,
+                             endpoint=server.endpoint, timeout=0.2)
+            try:
+                c.connect()
+                with self.assertRaises(NetworkError) as caught:
+                    c.status(datetime(2026,11,2))
+                message = str(caught.exception)
+                self.assertIn("status query: timed out", message)
+                self.assertIn("CGS0202 x1", message)
+                for secret in ("PANEL0001", "owner123", "secret456"):
+                    self.assertNotIn(secret, message)
+            finally:
+                c.close()
+            self.assertEqual(len(server.requests), 3)
+
+    def test_remote_close_is_not_reported_as_a_timeout_or_logout(self):
+        def session(conn, stream, requests):
+            handshake(conn, stream, requests)
+            requests.append(stream.readline())
+            conn.shutdown(socket.SHUT_WR)
+            self.assertEqual(stream.readline(), b"")
+        with Server(session) as server:
+            c = client(endpoint=server.endpoint)
+            try:
+                c.connect()
+                with self.assertRaisesRegex(NetworkError, "status query: connection closed by peer"):
+                    c.status(datetime(2026,11,2))
+            finally:
+                c.close()
+
+    def test_cli_compact_output_tracks_received_mode_changes(self):
+        def session(conn, stream, requests):
+            handshake(conn, stream, requests)
+            for mode in ("1", "2", "2"):
+                requests.append(stream.readline())
+                conn.sendall(f"CGS021055551000520{mode}00\r\n".encode())
+        with Server(session) as server:
+            output, errors = io.StringIO(), io.StringIO()
+            def factory(*args, **kwargs):
+                return StatusClient(*args, endpoint=server.endpoint, **kwargs)
+            with patch("h4.__main__.StatusClient", side_effect=factory), \
+                    patch.object(StatusClient, "wait"), \
+                    contextlib.redirect_stdout(output), contextlib.redirect_stderr(errors):
+                run({"device_id":"PANEL0001", "username":"owner123", "password":"secret456",
+                     "allow_plaintext":True, "samples":3})
+            rows = [json.loads(line) for line in output.getvalue().splitlines()]
+            self.assertEqual([r['mode'] for r in rows], ['disarmed','armed_home','armed_home'])
+            self.assertEqual([r['mode_changed'] for r in rows], [None,True,False])
+            self.assertTrue(all(r['accessory_count'] == 0 and 'accessories' not in r for r in rows))
+            self.assertIn("Probe completed normally after 3 samples", errors.getvalue())
+
+    def test_cli_accessory_details_are_opt_in(self):
+        def session(conn, stream, requests):
+            handshake(conn, stream, requests)
+            requests.append(stream.readline())
+            conn.sendall(b"CGS021055551000520100\r\n")
+        with Server(session) as server:
+            output = io.StringIO()
+            def factory(*args, **kwargs):
+                return StatusClient(*args, endpoint=server.endpoint, **kwargs)
+            with patch("h4.__main__.StatusClient", side_effect=factory), \
+                    contextlib.redirect_stdout(output), contextlib.redirect_stderr(io.StringIO()):
+                run({"device_id":"PANEL0001", "username":"owner123", "password":"secret456",
+                     "allow_plaintext":True, "samples":1, "include_accessories":True})
+            self.assertEqual(json.loads(output.getvalue())['accessories'], [])
 
 
 if __name__ == "__main__":

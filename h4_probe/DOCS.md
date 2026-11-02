@@ -18,6 +18,7 @@ Open the add-on's **Configuration** tab and fill in:
 | `samples` | Keep `6` for the first run. |
 | `interval` | Keep `10` seconds for the first run. |
 | `timezone` | Your local IANA timezone, for example `Europe/Athens`. |
+| `include_accessories` | Keep disabled for short status logs. Enable only when raw sensor records are needed for diagnosis. |
 
 Enter credentials only here, on your own Home Assistant installation. Do not
 send them through chat or commit them to GitHub. Click **Save**.
@@ -32,11 +33,17 @@ behavior and acceptance of empty optional push metadata are unverified.
 
 1. Open **Info**, click **Start**, then open **Logs**.
 2. Look for a JSON line containing `"mode": "disarmed"`, `"armed_away"`,
-   `"armed_home"`, or `"unknown"`.
-3. Compare the mode with the app. If convenient, use your RF remote to change
-   mode during the roughly one-minute sample window and check the next reply.
-   You do not need to trigger an alarm.
-4. After six samples the add-on stops. That is expected. Leave automatic start
+   `"armed_home"`, or `"unknown"`. `mode_changed` is `null` for the first reply,
+   then `true` when the returned mode code differs from the previous reply.
+   It compares service replies; it does not independently verify the panel LED
+   or prove that a response is fresh. `accessory_count` is always included.
+3. For a controlled RF test, use `samples: 12` and `interval: 10`. Fully close
+   the phone app, then use your RF remote to select disarmed, home and disarmed,
+   holding each mode for at least 30 seconds. Check the panel LED and compare
+   the log. Quicker changes may occur between polls and be missed. You do not
+   need to trigger an alarm.
+4. After the configured samples the add-on logs normal completion and stops.
+   That is expected. Leave automatic start
    and watchdog disabled. Click **Start** again for another short test.
 
 Accessory state/alarm fields are raw codes, not yet verified contact/siren
@@ -54,8 +61,13 @@ states. Errors do not produce an assumed armed or disarmed state.
   different notification from account removal; it is not a rate-limit message.
 - **Account notification / CGS0252:** the app handles this as an account removed.
   Verify the account in the app. The probe does not delete or modify accounts.
-- **Panel offline / network error:** check that the normal app can reach your
-  panel and that HAOS has outbound Internet access. No port forwarding is needed.
+- **Panel offline:** the service reported the panel offline.
+- **Network failure:** version 0.1.2 identifies the failing step and whether it
+  timed out, was closed/reset by the peer, or failed to connect/resolve. A status
+  timeout means a fresh expected status reply did not arrive before the
+  deadline. It does not establish spam blocking, an offline panel, or a session
+  restriction. Listed reply codes contain no message bodies. Check that HAOS
+  has outbound Internet access; no port forwarding is needed.
 - **Protocol compatibility check failed:** keep the exact sanitized error text;
   your original H4 or its service may use a different response format.
 
@@ -80,5 +92,9 @@ cannot tell us which of these arrived. Update to 0.1.1 for separate messages.
 If the H4 app offers **Add family member / User management**, a separate
 authorized user for the add-on is a possible long-term solution. Whether this
 panel/service allows both accounts to stay connected still needs testing.
+Successful login with that user alone does not establish simultaneous access.
+If the RF-only test works, repeat once with the phone app opening partway
+through. Record the phone behavior and the probe's last error. Avoid continuously
+restarting either client to compete for a session.
 The probe deliberately does not reconnect automatically in response to logout
 notifications or attempt to defeat the service's session policy.
