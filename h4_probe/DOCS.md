@@ -34,6 +34,7 @@ competing with a phone login.
 | `mqtt_tls` | Certificate-verified TLS for a manually configured broker. Use its TLS port. |
 | `samples` | Probe only: number of replies before normal completion. |
 | `include_accessories` | Probe only: include raw sensor records. Leave off for compact logs. |
+| `event_diagnostics` | Off by default. Log safe identifiers while awaiting replies and between polls. Never changes MQTT state from idle frames. |
 
 MQTT auto-discovery reads the fixed local Supervisor endpoint and does not log
 its token, broker password or response. The alarm and MQTT passwords are separate.
@@ -81,6 +82,48 @@ and `interval: 10`, close the phone app fully and hold RF-selected disarmed,
 home, then disarmed for 30 seconds each. Compare the physical LED with the logs.
 `mode_changed` compares received values, not the physical LED independently.
 Normal sample completion is logged explicitly.
+
+## Optional receive diagnostics (0.2.1)
+
+This is the first investigation step toward faster updates. It observes message
+identifiers while no request is active, as well as during normal replies.
+It does **not** update MQTT mode or confirm a command from an idle frame.
+Defaults and normal polling frequency remain unchanged when the option is off.
+
+After updating to a merged 0.2.1 release, run a short controlled test:
+
+1. Keep the working dedicated account and select `run_mode: mqtt`. Set
+   `event_diagnostics: true`, `enable_controls: false` and `interval: 60`.
+   The temporary longer interval gives a clear observation window; HA mode
+   updates still wait for polls during this diagnostic release.
+2. Close the phone app. Start the bridge and wait for its first normal status
+   line. After about ten seconds, use the RF remote to select home, wait twenty
+   seconds, then disarm and wait another twenty seconds. Note the RF change
+   times and verify the physical LED. There is no need to trigger an alarm.
+3. Repeat once while using the phone app on its existing separate account.
+   Keep the test to a few minutes and share the compact log plus the change
+   times, not credentials or raw packet captures.
+4. Return `event_diagnostics` to `false` and `interval` to `10` afterwards.
+
+Synthetic example:
+
+```text
+H4 RX phase=idle server_command=10 device_command=01 frame_bytes=80 since_status_request_s=12.345
+```
+
+The fields contain only the read phase, validated two-digit command identifiers,
+line size excluding its terminator and elapsed time since this client last sent a status query. No
+response bodies, mode values, sensor/account details or endpoints are added to
+these diagnostic lines. Normal status log lines keep their existing behavior.
+Output is limited to 500 receive records per connection.
+`envelope=unsupported` records a safe prefix before the existing protocol-error
+handling stops the client; it does not accept that message as a valid response.
+
+`phase=idle` describes **when the frame was read**, not when the server sent it.
+It can be a late/duplicate reply or bytes buffered after an earlier read, so it
+does not alone prove a push update. Correlation with repeated RF/app changes is
+needed before implementing event-driven state. Explicit logout/offline messages
+are still respected; no extra queries or login sessions are created.
 
 ## Errors
 

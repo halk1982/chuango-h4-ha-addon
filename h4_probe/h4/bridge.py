@@ -24,12 +24,15 @@ class Confirmation:
         return None
 
 
-def connected_loop(client, broker, stop, *, interval, zone, confirmation_timeout, on_stable=None):
+def connected_loop(client, broker, stop, *, interval, zone, confirmation_timeout,
+                   on_stable=None, event_diagnostics=False):
     pending = None
     pending_epoch = None
     next_poll, next_heartbeat = 0, time.monotonic()+10
     stable_reads = 0
     while not stop.is_set():
+        if event_diagnostics:
+            client.observe_events()
         now = time.monotonic()
         if now >= next_poll:
             status = client.status(datetime.now(zone))
@@ -73,6 +76,9 @@ def run_bridge(options, *, stop=None, client_factory=StatusClient, broker_factor
     controls = options.get("enable_controls",False)
     confirm_timeout = options.get("confirmation_timeout",120)
     retries = options.get("reconnect_attempts",3)
+    event_diagnostics = options.get("event_diagnostics",False)
+    if type(event_diagnostics) is not bool:
+        raise ValueError("Invalid event diagnostic flag")
     if type(interval) is not int or not 5 <= interval <= 300:
         raise ValueError("Invalid polling interval")
     if type(controls) is not bool or type(options.get("allow_plaintext",False)) is not bool:
@@ -88,9 +94,12 @@ def run_bridge(options, *, stop=None, client_factory=StatusClient, broker_factor
         for signum in (signal.SIGTERM,signal.SIGINT):
             signal.signal(signum,lambda *_:stop.set())
     client = client_factory(options.get("device_id",""),options.get("username",""),
-                            options.get("password",""),allow_plaintext=options.get("allow_plaintext",False))
+                            options.get("password",""),allow_plaintext=options.get("allow_plaintext",False),
+                            event_diagnostics=event_diagnostics)
     broker = broker_factory(broker_settings(options),options["device_id"],controls=controls,interval=interval)
     LOG.info("Starting MQTT bridge; controls %s", "enabled (experimental)" if controls else "disabled")
+    if event_diagnostics:
+        LOG.info("H4 receive diagnostics enabled; idle frames do not update MQTT state")
     failures = 0
     def stable():
         nonlocal failures
@@ -102,7 +111,8 @@ def run_bridge(options, *, stop=None, client_factory=StatusClient, broker_factor
             try:
                 client.connect()
                 connected_loop(client,broker,stop,interval=interval,zone=zone,
-                               confirmation_timeout=confirm_timeout,on_stable=stable)
+                               confirmation_timeout=confirm_timeout,on_stable=stable,
+                               event_diagnostics=event_diagnostics)
                 return
             except AuthenticationError:
                 LOG.error("Alarm authentication/session ended. Stopping without login retries.")
