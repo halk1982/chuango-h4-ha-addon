@@ -64,6 +64,18 @@ sensor meanings have not yet been validated and are not inferred from raw codes.
 Once the alarm entity is tested, it can be selected in your existing HomeKit
 Bridge. HomeKit operation remains to be checked on your installation.
 
+## Faster-update investigation
+
+The first diagnostic change (0.2.1) adds disabled-by-default `event_diagnostics`.
+It logs safe incoming identifiers between polls and during requests without
+using idle frames as alarm state. A single socket buffer preserves partial and
+coalesced packets. No extra queries or sessions are introduced.
+
+See the [controlled RF/app test](h4_probe/DOCS.md#optional-receive-diagnostics-021).
+An idle frame may be late, duplicated or previously buffered; it does not alone
+prove server push. A subsequent implementation PR depends on that evidence.
+Changes use feature branches and PR review, as recorded in [AGENTS.md](AGENTS.md).
+
 ## First installation
 
 For a repository Home Assistant can fetch without signing in, add this URL in

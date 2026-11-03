@@ -28,10 +28,16 @@ def run(options):
     include_accessories = options.get("include_accessories", False)
     if type(include_accessories) is not bool:
         raise ValueError("include_accessories must be a boolean")
+    event_diagnostics = options.get("event_diagnostics",False)
+    if type(event_diagnostics) is not bool:
+        raise ValueError("event_diagnostics must be a boolean")
+    if event_diagnostics:
+        logging.basicConfig(level=logging.INFO,format="%(asctime)s %(levelname)s %(message)s")
     zone = ZoneInfo(options.get("timezone", "Europe/Athens"))
     client = StatusClient(options.get("device_id", ""), options.get("username", ""),
                           options.get("password", ""),
-                          allow_plaintext=options.get("allow_plaintext", False))
+                          allow_plaintext=options.get("allow_plaintext", False),
+                          event_diagnostics=event_diagnostics)
     print("Experimental H4 status probe: login and status queries only; no arm/disarm commands.", file=sys.stderr, flush=True)
     previous_mode_code = None
     try:
@@ -62,6 +68,7 @@ def main(argv=None):
     parser.add_argument("--interval", type=int, default=10)
     parser.add_argument("--timezone", default="Europe/Athens")
     parser.add_argument("--include-accessories", action="store_true", help="Include raw accessory records in logs")
+    parser.add_argument("--event-diagnostics", action="store_true", help="Log safe incoming IDs between polls; no event-driven state updates")
     args = parser.parse_args(argv)
     try:
         if args.options:
@@ -75,7 +82,8 @@ def main(argv=None):
                        "password": getpass.getpass("App password: "),
                        "allow_plaintext": True, "samples": args.samples,
                        "interval": args.interval, "timezone": args.timezone,
-                       "include_accessories": args.include_accessories}
+                       "include_accessories": args.include_accessories,
+                       "event_diagnostics": args.event_diagnostics}
         run_mode = options.get("run_mode","probe")
         if run_mode == "mqtt":
             from .bridge import run_bridge

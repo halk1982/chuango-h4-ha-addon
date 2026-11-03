@@ -1,3 +1,16 @@
+# 0.2.1
+
+- Add opt-in `event_diagnostics` to inspect incoming messages between polls in
+  MQTT and probe modes. Polling remains the source of reported state.
+- Log only read phase, validated command identifiers, frame size and elapsed
+  time since the last status request; no response bodies or sensor/account data.
+- Share one bounded socket buffer between normal reads and nonblocking idle
+  observation so fragmented/coalesced messages remain intact.
+- Bound diagnostic output to 500 receive lines per connection. Diagnostics are
+  disabled by default; no extra queries or changes to command confirmation.
+- Document a controlled RF/app test. Idle frames may be delayed/duplicate
+  replies; they do not alone prove server push or justify an MQTT state update.
+
 # 0.2.0
 
 - Add continuous MQTT mode with Home Assistant discovery and automatic HAOS
