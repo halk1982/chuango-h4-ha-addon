@@ -10,6 +10,17 @@ class ProtocolError(Exception):
     """Malformed or unsupported response; messages never include wire data."""
 
 
+class UnmatchedResponseMarker(ProtocolError):
+    """A decimal response marker does not match this client's requests."""
+
+    def __init__(self, command, frame_bytes):
+        self.command = command
+        super().__init__(
+            f"Unexpected response marker (server_command={command}; "
+            f"marker_format=decimal; frame_bytes={frame_bytes})"
+        )
+
+
 class AuthenticationError(ProtocolError):
     pass
 
@@ -142,7 +153,12 @@ def parse_frame(line: str) -> Frame:
     command = line[5:7]
     _number(command)
     if line[7:11] != MARKER:
-        raise ProtocolError("Unexpected response marker")
+        if line[7:11].isascii() and line[7:11].isdecimal():
+            raise UnmatchedResponseMarker(command, len(line))
+        raise ProtocolError(
+            f"Unexpected response marker (server_command={command}; "
+            f"marker_format=nondecimal; frame_bytes={len(line)})"
+        )
     return Frame(command, line[11:])
 
 

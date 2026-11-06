@@ -13,7 +13,7 @@ slug, so existing users update their current installation.
 ## Update and start MQTT monitoring
 
 1. In the Add-on/App Store, select **⋮ → Check for updates**, open your installed
-   add-on and update to **0.2.0**. Its display name is now **Chuango H4 MQTT Bridge
+   add-on and update to **0.2.2**. Its display name is now **Chuango H4 MQTT Bridge
    (experimental)**.
 2. Keep your existing panel ID, dedicated account, password, timezone and
    `allow_plaintext` setting. Set `run_mode: mqtt`, `interval: 10` and
@@ -47,9 +47,12 @@ save and restart. This creates an MQTT alarm-control-panel entity supporting
 **arm home, arm away and disarm**. Disabling controls removes its discovery
 configuration while preserving the monitoring sensors.
 
-**Physical command execution is not yet user-validated.** Commands and their
-acknowledgement format come from the APK and have mock-server tests. A command
-is sent once, then the bridge reads actual panel state. An acknowledgement alone
+Arm home, arm away and disarm have worked in user tests on one installation,
+including through HomeKit. Intermittent status timeouts and response-marker
+errors remain under investigation; long-term reliability is not established.
+Commands and their acknowledgement format come from the APK and have
+mock-server tests. A command is sent once, then the bridge reads actual panel
+state. An acknowledgement alone
 never sets the reported mode. The command-result diagnostic changes from pending
 to confirmed, rejected or not_confirmed. Default confirmation deadline: 120
 seconds, allowing for panel exit delays. Uncertain/failed commands are never
@@ -62,7 +65,18 @@ or settings-write commands are provided. Triggered-alarm state and individual
 sensor meanings have not yet been validated and are not inferred from raw codes.
 
 Once the alarm entity is tested, it can be selected in your existing HomeKit
-Bridge. HomeKit operation remains to be checked on your installation.
+Bridge. A user-tested HA template can combine its mode/control with a separate
+ESP siren detector. The add-on itself does not supply triggered-alarm state.
+
+## Response markers (0.2.2)
+
+Established sessions ignore responses with a different four-digit numeric
+marker while continuing to wait for a matching reply within the original
+deadline. These frames cannot update mode or acknowledge/reject a command.
+Handshake/login remain strict, and commands are never replayed on reconnect.
+Bounded warnings and command-phase logs provide safe metadata without packet
+bodies. The exact format of the reported 0.2.1 marker error was not captured;
+the new handling is mock-tested and still needs physical validation.
 
 ## Faster-update investigation
 

@@ -46,9 +46,11 @@ additional **Chuango H4 Alarm** entity appears. Use that entity for a deliberate
 first test of arm home, arm away or disarm. These functions use the legitimate
 account already configured; the add-on has no siren/panic or account-writing API.
 
-**Physical commands have not yet been user-validated.** They are implemented
-from static APK traces and tested against mock responses. The bridge sends once,
-requires an acknowledgement, then queries actual state. It never publishes the
+Arm home, arm away and disarm have worked in user tests on one installation,
+including through HomeKit. Status timeouts and response-marker errors still
+need investigation; this does not establish long-term reliability. Commands
+are implemented from static APK traces and tested against mock responses. The
+bridge sends once, requires an acknowledgement, then queries actual state. It never publishes the
 requested mode as if it had already happened. The command-result sensor reports
 pending, confirmed, rejected or not_confirmed. A disconnect may leave the action
 outcome unconfirmed; check the panel/app. The bridge never replays that action.
@@ -58,7 +60,7 @@ are rejected. Disabling controls removes the alarm entity's MQTT discovery
 configuration. Keep your broker accessible only to your trusted clients.
 
 After this entity is validated, select it in the existing HomeKit Bridge if you
-want HomeKit access. That path still needs testing. Active-alarm/triggered state
+want HomeKit access. Active-alarm/triggered state
 and individual sensor meanings are not yet implemented; accessory count is
 reported without guessing sensor semantics.
 
@@ -124,6 +126,27 @@ It can be a late/duplicate reply or bytes buffered after an earlier read, so it
 does not alone prove a push update. Correlation with repeated RF/app changes is
 needed before implementing event-driven state. Explicit logout/offline messages
 are still respected; no extra queries or login sessions are created.
+
+## Response-marker handling (0.2.2)
+
+The client sends marker `5555` in its requests. An established session ignores
+frames with a different four-digit numeric marker while awaiting status or a
+command acknowledgement, or observing idle traffic. Their payloads cannot set
+state, confirm/reject commands, or satisfy a request. Waiting still ends at the
+original deadline; an uncertain action is never resent after a timeout or
+reconnect. Handshake and login still require the matching marker. Nondecimal
+markers and other unrecognized protocol formats still stop visibly.
+
+Default warnings identify only the read phase, server command and frame size,
+with five warnings per connection plus a suppression notice. Marker values and
+packet bodies are not logged. Command logs separately identify sending,
+acknowledgement and actual-state confirmation. An acknowledgement is not proof
+of a physical change.
+
+This behavior is covered by synthetic servers, including mismatched-only
+streams, wrong-marker rejection/status payloads, logout notifications and
+deadline enforcement. The observed 0.2.1 marker error did not include its marker
+format, so physical validation of this change is still required.
 
 ## Errors
 

@@ -1,3 +1,19 @@
+# 0.2.2
+
+- Keep an established session waiting for a matching reply when a frame uses
+  another four-digit numeric marker. Such frames never supply status or command
+  acknowledgements. The original response deadline remains in force; uncertain
+  commands are not resent.
+- Keep handshake/login markers strict. Nondecimal markers, malformed frames
+  and session/account notifications retain their existing failure handling.
+- Bound default mismatched-marker warnings to five per connection. Log only
+  phase, command identifier and frame size; never marker values or packet bodies.
+- Log command send, acknowledgement and state-confirmation phases separately,
+  so a status-query timeout is distinguishable from a missing command ACK.
+- Validate with synthetic loopback servers and an isolated MQTT broker. The
+  exact marker in the reported physical-alarm incident was not captured; this
+  change does not establish the format or meaning of that particular frame.
+
 # 0.2.1
 
 - Add opt-in `event_diagnostics` to inspect incoming messages between polls in

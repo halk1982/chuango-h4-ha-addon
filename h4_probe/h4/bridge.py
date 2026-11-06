@@ -42,6 +42,7 @@ def connected_loop(client, broker, stop, *, interval, zone, confirmation_timeout
             if pending:
                 outcome = pending.outcome(status,time.monotonic())
                 if outcome:
+                    LOG.info("Alarm command result=%s", outcome)
                     broker.result(outcome)
                     broker.release_command(pending_epoch)
                     pending = None
@@ -57,12 +58,15 @@ def connected_loop(client, broker, stop, *, interval, zone, confirmation_timeout
                 broker.release_command(epoch)
                 continue
             broker.result("pending")
+            LOG.info("Sending alarm mode command action=%s once; awaiting acknowledgement", action)
             try:
                 client.change_mode(ACTIONS[action])
             except CommandRejectedError:
+                LOG.warning("Alarm mode command action=%s rejected", action)
                 broker.result("rejected")
                 broker.release_command(epoch)
                 continue
+            LOG.info("Alarm mode command action=%s acknowledged; requesting actual status", action)
             pending = Confirmation(action,confirmation_timeout,time.monotonic())
             pending_epoch = epoch
             # Read actual state after the acknowledgement; never set the

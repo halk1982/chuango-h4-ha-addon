@@ -8,7 +8,7 @@ from contextlib import contextmanager
 from datetime import datetime
 
 from .protocol import (
-    ProtocolError, forwarded_payload, directory_request, handshake_request,
+    ProtocolError, UnmatchedResponseMarker, forwarded_payload, directory_request, handshake_request,
     heartbeat_request, login_request, parse_directory, parse_frame, parse_status,
     require_success, status_request,
     mode_request, require_mode_ack,
@@ -105,6 +105,7 @@ class StatusClient:
         self._phase = "idle"
         self._last_status_request = None
         self._diagnostic_lines = 0
+        self._marker_warnings = 0
 
     @contextmanager
     def _transport(self, phase):
@@ -165,6 +166,24 @@ class StatusClient:
     def _parse_received(self, line):
         try:
             frame = parse_frame(line)
+        except UnmatchedResponseMarker as error:
+            self._diagnostic_rx(None, line)
+            # Never treat another marker as a reply to our request. Established
+            # sessions may receive other traffic; ignore it within the existing
+            # read deadline, without accepting its payload or replaying actions.
+            # Handshake/login still require the exact expected marker.
+            if self._phase not in ("idle", "status query", "mode command"):
+                raise
+            self._reply_counts["unmatched CGS02" + error.command] += 1
+            if self._marker_warnings < 5:
+                LOG.warning(
+                    "Ignored mismatched response marker; phase=%s server_command=%s frame_bytes=%d",
+                    self._phase, error.command, len(line),
+                )
+                self._marker_warnings += 1
+                if self._marker_warnings == 5:
+                    LOG.warning("Further mismatched-marker warnings suppressed for this connection")
+            return None
         except ProtocolError:
             self._diagnostic_rx(None, line)
             raise
@@ -172,9 +191,11 @@ class StatusClient:
         return frame
 
     def _read_frame(self, deadline):
-        frame = self._parse_received(self.wire.read(deadline))
-        self._reply_counts["CGS02" + frame.command] += 1
-        return frame
+        while True:
+            frame = self._parse_received(self.wire.read(deadline))
+            if frame is not None:
+                self._reply_counts["CGS02" + frame.command] += 1
+                return frame
 
     def close(self):
         if self.wire is not None:
@@ -194,6 +215,7 @@ class StatusClient:
         self.close()
         self._last_status_request = None
         self._diagnostic_lines = 0
+        self._marker_warnings = 0
         endpoint = self.endpoint
         if endpoint is None:
             with self._transport("directory connection"):
