@@ -10,6 +10,31 @@ class ProtocolError(Exception):
     """Malformed or unsupported response; messages never include wire data."""
 
 
+class ServerRejectedError(ProtocolError):
+    """An exact negative result envelope; no vendor meaning is inferred."""
+
+    def __init__(self, command, code):
+        self.command = self._safe_code(command)
+        self.code = self._safe_code(code)
+        self.phase = "unknown"
+        super().__init__(self._message())
+
+    @staticmethod
+    def _safe_code(value):
+        return value if (isinstance(value, str) and len(value) == 2
+                         and value.isascii() and value.isdecimal()) else "unknown"
+
+    def set_phase(self, phase):
+        self.phase = phase if phase in (
+            "handshake", "login response", "status query", "mode command", "idle"
+        ) else "unknown"
+        self.args = (self._message(),)
+
+    def _message(self):
+        return (f"Server rejected request (phase={self.phase}; "
+                f"server_command={self.command}; code={self.code})")
+
+
 class UnmatchedResponseMarker(ProtocolError):
     """A decimal response marker does not match this client's requests."""
 
@@ -170,6 +195,8 @@ def require_success(frame: Frame) -> str:
         suffix = f" (code {code})" if len(code) == 2 and code.isascii() and code.isdecimal() else ""
         if frame.command == "04":
             raise AuthenticationError("Login rejected" + suffix)
+        if frame.body[0] == "0" and len(frame.body) == 3 and suffix:
+            raise ServerRejectedError(frame.command, code)
         raise ProtocolError("Server rejected request" + suffix)
     return frame.body[1:]
 

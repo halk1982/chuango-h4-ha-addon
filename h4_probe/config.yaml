@@ -1,5 +1,5 @@
 name: Chuango H4 MQTT Bridge (experimental)
-version: "0.2.2"
+version: "0.2.3"
 slug: chuango_h4_probe
 description: Original Chuango H4 status via MQTT, with opt-in experimental controls
 url: https://github.com/halk1982/chuango-h4-ha-addon
