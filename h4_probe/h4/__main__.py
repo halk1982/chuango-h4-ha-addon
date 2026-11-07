@@ -12,7 +12,7 @@ from .client import NetworkError, StatusClient
 from .errors import MQTTError
 from .protocol import (
     AccountRemovedError, AuthenticationError, PanelOfflineError, ProtocolError,
-    SessionReplacedError,
+    ServerRejectedError, SessionReplacedError,
 )
 
 
@@ -108,6 +108,8 @@ def main(argv=None):
               "probe stopped without automatic login retries.", file=sys.stderr)
     except MQTTError as error:
         print(f"MQTT failure: {error}. Check that Mosquitto is running and MQTT is configured.",file=sys.stderr)
+    except ServerRejectedError as error:
+        logging.error("Alarm server rejection: %s. Bridge/probe stopped; no status asserted.", error)
     except ProtocolError as error:
         print(f"Protocol compatibility check failed: {error}. No status asserted.", file=sys.stderr)
     except (OSError, TimeoutError):

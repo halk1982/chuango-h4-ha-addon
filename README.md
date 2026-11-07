@@ -40,6 +40,14 @@ bounded retries after 30, 60, 120… seconds; the budget resets after three stab
 status reads. Default: three retry attempts. MQTT broker connections reconnect
 independently without creating additional alarm logins.
 
+Version 0.2.3 also allows bounded recovery from an exact server rejection `08`
+on a read-only status query (server command `10`). It shares the network retry
+budget and backoff; a fresh status is required before availability returns.
+Handshake, login and mode-command rejections still stop. Logs identify the
+rejected phase, command and result code without response bodies. The vendor
+meaning of `08` is unknown, and older logs do not identify its failing phase;
+this is a narrow recovery policy, not a claim that every `08` is transient.
+
 ## Experimental arm/disarm controls
 
 After mode monitoring works, you can explicitly set `enable_controls: true`,

@@ -8,7 +8,7 @@ from contextlib import contextmanager
 from datetime import datetime
 
 from .protocol import (
-    ProtocolError, UnmatchedResponseMarker, forwarded_payload, directory_request, handshake_request,
+    ProtocolError, ServerRejectedError, UnmatchedResponseMarker, forwarded_payload, directory_request, handshake_request,
     heartbeat_request, login_request, parse_directory, parse_frame, parse_status,
     require_success, status_request,
     mode_request, require_mode_ack,
@@ -113,6 +113,9 @@ class StatusClient:
         previous_phase, self._phase = self._phase, phase
         try:
             yield
+        except ServerRejectedError as error:
+            error.set_phase(phase)
+            raise
         except OSError as error:
             if isinstance(error, TimeoutError):
                 reason = "timed out"

@@ -1,3 +1,18 @@
+# 0.2.3
+
+- Record phase, validated server-command identifier and result code for exact
+  negative response envelopes. Report terminal server rejection separately from
+  unsupported protocol formats; include the bridge version at MQTT startup.
+- Allow an exact code `08` rejection of a read-only status query (command `10`)
+  to use the existing bounded network reconnect budget and backoff. Require fresh
+  actual status before restoring availability; never replay a mode command.
+- Keep handshake/login/mode-command rejections, other codes, malformed envelopes
+  and explicit session/account notifications terminal. The vendor meaning of
+  `08` and the phase of the previously reported failure remain unknown.
+- Validate rejection phases, successful recovery, shared retry limits and no
+  command replay with synthetic loopback servers and worker regression tests.
+  Recovery from the user's particular physical-network incident is unverified.
+
 # 0.2.2
 
 - Keep an established session waiting for a matching reply when a frame uses

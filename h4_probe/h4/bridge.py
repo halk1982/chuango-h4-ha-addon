@@ -7,8 +7,11 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from .client import NetworkError, StatusClient
-from .mqtt_bridge import ACTIONS, MQTTBridge, MQTTError, broker_settings
-from .protocol import AuthenticationError, CommandRejectedError, PanelOfflineError, ProtocolError
+from .mqtt_bridge import ACTIONS, VERSION, MQTTBridge, MQTTError, broker_settings
+from .protocol import (
+    AuthenticationError, CommandRejectedError, PanelOfflineError, ProtocolError,
+    ServerRejectedError,
+)
 
 LOG = logging.getLogger(__name__)
 
@@ -101,7 +104,8 @@ def run_bridge(options, *, stop=None, client_factory=StatusClient, broker_factor
                             options.get("password",""),allow_plaintext=options.get("allow_plaintext",False),
                             event_diagnostics=event_diagnostics)
     broker = broker_factory(broker_settings(options),options["device_id"],controls=controls,interval=interval)
-    LOG.info("Starting MQTT bridge; controls %s", "enabled (experimental)" if controls else "disabled")
+    LOG.info("Starting MQTT bridge version=%s; controls %s", VERSION,
+             "enabled (experimental)" if controls else "disabled")
     if event_diagnostics:
         LOG.info("H4 receive diagnostics enabled; idle frames do not update MQTT state")
     failures = 0
@@ -121,7 +125,17 @@ def run_bridge(options, *, stop=None, client_factory=StatusClient, broker_factor
             except AuthenticationError:
                 LOG.error("Alarm authentication/session ended. Stopping without login retries.")
                 raise
-            except (NetworkError,PanelOfflineError) as error:
+            except (NetworkError,PanelOfflineError,ServerRejectedError) as error:
+                if isinstance(error, ServerRejectedError) and not (
+                    error.phase == "status query" and error.command == "10"
+                    and error.code == "08"
+                ):
+                    # The vendor meaning of rejection codes is unknown. Only
+                    # an exact 08 envelope on a read-only status query gets
+                    # a bounded recovery attempt; never retry a rejected write,
+                    # handshake or login, or a malformed negative envelope.
+                    broker.result("unconfirmed")
+                    raise
                 broker.offline()
                 broker.result("unconfirmed")
                 client.close()

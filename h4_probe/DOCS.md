@@ -75,6 +75,23 @@ prove the vendor has no caching; compare with your panel during testing.
 Transient cloud errors use increasing 30/60/120… second delays, limited by
 `reconnect_attempts`. Three stable readings reset that budget. The bridge stops
 on an unrecognized protocol response or explicit session/account/login rejection.
+From 0.2.3, an exact negative envelope with code `08` on a read-only status query
+(server command `10`) uses that same retry budget. The first delay is 30 seconds;
+after an earlier timeout has consumed a retry, it is 60 seconds. A successful
+connection alone cannot restore availability; a fresh panel status is required.
+No uncertain arm/disarm command is replayed, including when the status read
+following its acknowledgement fails. Setting `reconnect_attempts: 0` disables
+this recovery too. Exhausting the budget still stops the add-on.
+
+This narrow retry policy does not establish the vendor meaning of code `08`.
+Negative handshake, login and mode-command replies, other rejection codes and
+malformed negative envelopes retain terminal handling. Exact negative envelopes
+now report `phase`, `server_command` and `code`; terminal server rejections have
+a separate error message rather than the generic protocol-compatibility label.
+These metadata are logged without enabling `event_diagnostics`. Credentials,
+server addresses and response bodies are excluded. Startup identifies the bridge
+version. Older generic rejection logs cannot establish the phase or exact
+envelope, so 0.2.3 is not a demonstrated fix for every previously observed `08`.
 MQTT broker reconnection is independent and does not repeat cloud commands.
 
 ## Keep using the short probe
