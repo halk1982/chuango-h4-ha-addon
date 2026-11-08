@@ -6,7 +6,7 @@ import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from .client import NetworkError, StatusClient
+from .client import NetworkError, NetworkTimeoutError, StatusClient
 from .mqtt_bridge import ACTIONS, VERSION, MQTTBridge, MQTTError, broker_settings
 from .protocol import (
     AuthenticationError, CommandRejectedError, PanelOfflineError, ProtocolError,
@@ -14,6 +14,10 @@ from .protocol import (
 )
 
 LOG = logging.getLogger(__name__)
+
+
+class ConfirmationReadTimeout(NetworkError):
+    """An ACK was received, but actual state is unknown; never replay the write."""
 
 
 class Confirmation:
@@ -38,7 +42,12 @@ def connected_loop(client, broker, stop, *, interval, zone, confirmation_timeout
             client.observe_events()
         now = time.monotonic()
         if now >= next_poll:
-            status = client.status(datetime.now(zone))
+            try:
+                status = client.status(datetime.now(zone))
+            except NetworkTimeoutError as error:
+                if pending is None or time.monotonic() >= pending.deadline:
+                    raise
+                raise ConfirmationReadTimeout(str(error)) from None
             broker.report(status)
             stable_reads += 1
             if stable_reads == 3 and on_stable:on_stable()
@@ -142,9 +151,15 @@ def run_bridge(options, *, stop=None, client_factory=StatusClient, broker_factor
                 if failures >= retries:
                     LOG.error("Cloud reconnect limit reached; bridge stopped")
                     raise
-                delay = min(300,30*2**failures)
+                # An acknowledged command can already have changed the panel.
+                # Spend one ordinary retry slot without the initial wait to get
+                # actual state sooner. Pending state is discarded on reconnect,
+                # so further failures back off and no command is replayed.
+                immediate = isinstance(error, ConfirmationReadTimeout)
+                delay = 0 if immediate else min(300,30*2**failures)
                 failures += 1
-                LOG.warning("Alarm connection unavailable; retry %d/%d in %d seconds: %s",failures,retries,delay,error)
+                context = " after command acknowledgement" if immediate else ""
+                LOG.warning("Alarm connection unavailable%s; retry %d/%d in %d seconds: %s",context,failures,retries,delay,error)
                 if stop.wait(delay):return
             except ProtocolError:
                 # Unrecognized replies or uncertain command outcomes need

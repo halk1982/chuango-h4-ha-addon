@@ -48,6 +48,12 @@ rejected phase, command and result code without response bodies. The vendor
 meaning of `08` is unknown, and older logs do not identify its failing phase;
 this is a narrow recovery policy, not a claim that every `08` is transient.
 
+Version 0.2.4 spends one configured retry slot immediately when an acknowledged
+command is awaiting confirmation and its status read times out. This removes
+the usual initial 30-second reconnect wait for that case; the read timeout and
+later backoff remain. It never resends the command or reports mode from its ACK.
+Normal polling and missing-ACK recovery keep their existing delays.
+
 ## Experimental arm/disarm controls
 
 After mode monitoring works, you can explicitly set `enable_controls: true`,
