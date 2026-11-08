@@ -76,7 +76,7 @@ Transient cloud errors use increasing 30/60/120… second delays, limited by
 `reconnect_attempts`. Three stable readings reset that budget. The bridge stops
 on an unrecognized protocol response or explicit session/account/login rejection.
 From 0.2.3, an exact negative envelope with code `08` on a read-only status query
-(server command `10`) uses that same retry budget. The first delay is 30 seconds;
+(server command `10`) uses that same retry budget. Its first delay is 30 seconds;
 after an earlier timeout has consumed a retry, it is 60 seconds. A successful
 connection alone cannot restore availability; a fresh panel status is required.
 No uncertain arm/disarm command is replayed, including when the status read
@@ -93,6 +93,27 @@ server addresses and response bodies are excluded. Startup identifies the bridge
 version. Older generic rejection logs cannot establish the phase or exact
 envelope, so 0.2.3 is not a demonstrated fix for every previously observed `08`.
 MQTT broker reconnection is independent and does not repeat cloud commands.
+
+From 0.2.4, a transport timeout on a status read while an acknowledged command is
+still awaiting confirmation spends one configured retry slot immediately. The
+ordinary 30-second initial reconnect wait is skipped only for that case. The
+query's timeout (currently 15 seconds) is unchanged; reconnection and a fresh
+read still take time, so this does not promise instant HomeKit completion.
+The warning says `after command acknowledgement` and shows the actual retry
+delay, normally `retry 1/3 in 0 seconds` for the first such failure.
+
+An immediate attempt uses the same budget, including any earlier failures.
+Pending command tracking is discarded on reconnect; another timeout or failed
+connection therefore backs off normally (60 seconds after a first immediate
+attempt). Zero retries disables this path. Missing command ACKs, expired
+confirmations, non-timeout errors and routine polling failures do not get this
+shortcut. Authentication/session/account/protocol rejection handling is unchanged.
+
+Availability is removed during recovery and restored only from new actual
+status. The old command's result remains `unconfirmed` across connection loss;
+the actual mode still updates normally after recovery. There is no automatic
+command replay or optimistic armed/disarmed assertion. This reduces an avoidable
+delay; it does not establish why the original status response was missing.
 
 ## Keep using the short probe
 

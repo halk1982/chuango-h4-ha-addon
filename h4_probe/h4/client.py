@@ -23,6 +23,10 @@ class NetworkError(Exception):
     """Safe transport diagnostics: no endpoints, credentials or response bodies."""
 
 
+class NetworkTimeoutError(NetworkError):
+    """A transport deadline expired; distinct from disconnect/reset/DNS errors."""
+
+
 class Wire:
     def __init__(self, endpoint, timeout):
         self.socket = socket.create_connection(endpoint, timeout=timeout)
@@ -135,7 +139,8 @@ class StatusClient:
                     reason += f" (errno {error.errno})"
             summary = ", ".join(f"{code} x{count}" for code, count in self._reply_counts.most_common(5))
             replies = f"; reply codes seen: {summary}" if summary else "; no reply decoded during this step"
-            raise NetworkError(f"{phase}: {reason}{replies}") from None
+            failure = NetworkTimeoutError if isinstance(error, TimeoutError) else NetworkError
+            raise failure(f"{phase}: {reason}{replies}") from None
         finally:
             self._phase = previous_phase
 

@@ -1,3 +1,17 @@
+# 0.2.4
+
+- Reconnect without the ordinary initial 30-second wait when a status read
+  times out while an acknowledged command is still awaiting confirmation.
+  Spend one configured retry slot; further failures retain normal backoff.
+- Distinguish transport timeouts from other network failures without parsing
+  log strings. Leave routine polling, missing-ACK failures, expired confirmation
+  windows, rejection handling and query timeouts unchanged.
+- Require new actual status to restore availability and keep commands
+  unconfirmed across connection loss. Never replay arm/disarm commands.
+- Validate the ACK/timeout/reconnect/fresh-status path with a real loopback
+  mock, plus retry-budget, backoff, expired-window and no-replay regressions.
+  No real alarm or production MQTT broker is contacted by these tests.
+
 # 0.2.3
 
 - Record phase, validated server-command identifier and result code for exact

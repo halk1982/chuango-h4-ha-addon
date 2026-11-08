@@ -14,7 +14,7 @@ import paho.mqtt.client as mqtt
 from .errors import MQTTError
 
 LOG = logging.getLogger(__name__)
-VERSION = "0.2.3"
+VERSION = "0.2.4"
 ACTIONS = {"ARM_AWAY": "0", "DISARM": "1", "ARM_HOME": "2"}
 
 
