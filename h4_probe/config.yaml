@@ -1,5 +1,5 @@
 name: Chuango H4 MQTT Bridge (experimental)
-version: "0.2.4"
+version: "0.2.5"
 slug: chuango_h4_probe
 description: Original Chuango H4 status via MQTT, with opt-in experimental controls
 url: https://github.com/halk1982/chuango-h4-ha-addon
@@ -26,6 +26,7 @@ options:
   enable_controls: false
   confirmation_timeout: 120
   reconnect_attempts: 3
+  recover_after_outage: true
   mqtt_host: ""
   mqtt_port: 1883
   mqtt_username: ""
@@ -45,6 +46,7 @@ schema:
   enable_controls: bool
   confirmation_timeout: int(15,300)
   reconnect_attempts: int(0,5)
+  recover_after_outage: bool
   mqtt_host: str?
   mqtt_port: port
   mqtt_username: str?

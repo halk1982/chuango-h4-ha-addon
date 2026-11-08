@@ -128,11 +128,12 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(client.connect.call_count,1)
         broker.close.assert_called_once()
 
-    def test_network_retries_are_bounded(self):
+    def test_network_retries_are_bounded_when_outage_recovery_is_disabled(self):
         client=Mock();client.connect.side_effect=NetworkError('connection timed out')
         broker=Mock();stop=Mock();stop.is_set.return_value=False;stop.wait.return_value=False
         options={'device_id':'PANEL0001','username':'owner123','password':'secret456',
-                 'allow_plaintext':True,'mqtt_host':'localhost','reconnect_attempts':2}
+                 'allow_plaintext':True,'mqtt_host':'localhost','reconnect_attempts':2,
+                 'recover_after_outage':False}
         with self.assertRaises(NetworkError):
             run_bridge(options,stop=stop,client_factory=lambda *a,**k:client,
                        broker_factory=lambda *a,**k:broker)

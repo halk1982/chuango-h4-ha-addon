@@ -92,6 +92,7 @@ def run_bridge(options, *, stop=None, client_factory=StatusClient, broker_factor
     controls = options.get("enable_controls",False)
     confirm_timeout = options.get("confirmation_timeout",120)
     retries = options.get("reconnect_attempts",3)
+    recover_after_outage = options.get("recover_after_outage",True)
     event_diagnostics = options.get("event_diagnostics",False)
     if type(event_diagnostics) is not bool:
         raise ValueError("Invalid event diagnostic flag")
@@ -103,6 +104,8 @@ def run_bridge(options, *, stop=None, client_factory=StatusClient, broker_factor
         raise ValueError("Invalid command confirmation timeout")
     if type(retries) is not int or not 0 <= retries <= 5:
         raise ValueError("Invalid reconnect limit")
+    if type(recover_after_outage) is not bool:
+        raise ValueError("Invalid outage recovery flag")
     zone = ZoneInfo(options.get("timezone","Europe/Athens"))
     install_handlers = stop is None and threading.current_thread() is threading.main_thread()
     stop = stop if stop is not None else threading.Event()
@@ -118,9 +121,13 @@ def run_bridge(options, *, stop=None, client_factory=StatusClient, broker_factor
     if event_diagnostics:
         LOG.info("H4 receive diagnostics enabled; idle frames do not update MQTT state")
     failures = 0
+    outage_cooldown = False
     def stable():
-        nonlocal failures
+        nonlocal failures, outage_cooldown
+        if outage_cooldown:
+            LOG.info("Alarm connection stable after outage; normal retry budget restored")
         failures = 0
+        outage_cooldown = False
     try:
         broker.start()
         broker.result("idle")
@@ -149,6 +156,16 @@ def run_bridge(options, *, stop=None, client_factory=StatusClient, broker_factor
                 broker.result("unconfirmed")
                 client.close()
                 if failures >= retries:
+                    if (recover_after_outage and retries > 0
+                            and isinstance(error, (NetworkError, PanelOfflineError))):
+                        # Remain offline and bound the attempt rate, without
+                        # restarting the process or growing the retry counter.
+                        # Unknown server rejections never enter this loop.
+                        outage_cooldown = True
+                        LOG.warning("Network retry budget exhausted; bridge remains offline; "
+                                    "retry in 300 seconds: %s", error)
+                        if stop.wait(300):return
+                        continue
                     LOG.error("Cloud reconnect limit reached; bridge stopped")
                     raise
                 # An acknowledged command can already have changed the panel.

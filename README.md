@@ -35,14 +35,26 @@ limit; it does not prove that the vendor itself has no caching.
 
 Keep the watchdog off while testing. After a longer successful MQTT run, start
 on boot can be enabled if desired. Authentication/session revocation stops the
-bridge instead of starting a login loop. Transient network/offline errors use
-bounded retries after 30, 60, 120… seconds; the budget resets after three stable
-status reads. Default: three retry attempts. MQTT broker connections reconnect
-independently without creating additional alarm logins.
+bridge instead of starting a login loop. Transient network/offline errors first
+use an initial retry budget with 30, 60, 120… second delays. Default: three retry
+attempts. From 0.2.5, `recover_after_outage: true` (the default) keeps the bridge
+running and unavailable after that budget is exhausted, with another network
+attempt after each five-minute wait. Three stable status reads restore the
+initial budget. Set the flag to false for the old stop-after-budget behavior;
+`reconnect_attempts: 0` disables both forms of recovery. MQTT broker connections
+reconnect independently without creating additional alarm logins.
+
+Outage recovery covers transport failures and explicit panel-offline notices.
+It does not turn account/login/session or unknown protocol rejections into
+endless retries. A fresh actual status is required to restore availability;
+queued/uncertain arm/disarm commands are never replayed. After the network
+returns, recovery may wait up to five minutes for the next attempt, plus the
+connection/query time. A watchdog restart is not needed for this outage path.
 
 Version 0.2.3 also allows bounded recovery from an exact server rejection `08`
-on a read-only status query (server command `10`). It shares the network retry
-budget and backoff; a fresh status is required before availability returns.
+on a read-only status query (server command `10`). It shares the initial retry
+budget and backoff, but never enters the ongoing network-outage cooldown loop;
+a fresh status is required before availability returns.
 Handshake, login and mode-command rejections still stop. Logs identify the
 rejected phase, command and result code without response bodies. The vendor
 meaning of `08` is unknown, and older logs do not identify its failing phase;
