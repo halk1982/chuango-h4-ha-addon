@@ -1,3 +1,20 @@
+# 0.2.5
+
+- Keep MQTT mode alive through prolonged network/panel-offline failures with
+  `recover_after_outage: true` (default). After the initial retry budget, wait
+  five minutes between further attempts rather than exiting permanently.
+- Keep failed connections closed and MQTT unavailable until fresh actual state
+  arrives. Cap the retry counter; restore the initial budget after three stable
+  readings without repeating fast bursts during an ongoing/flapping outage.
+- Keep zero retries and opt-out behavior terminal. Authentication/session/account
+  failures, unsupported protocol and server rejections do not enter the ongoing
+  outage loop; code-08 status rejections retain their initial retry limit.
+- Preserve the post-ACK immediate retry, cancellation during cooldown and the
+  rule that uncertain arm/disarm commands are never replayed.
+- Validate long-outage recovery, cooldown timing, stability resets, shutdown,
+  opt-out/zero settings and terminal-error handling with synthetic failures.
+  Physical-network recovery and Supervisor watchdog behavior remain unverified.
+
 # 0.2.4
 
 - Reconnect without the ordinary initial 30-second wait when a status read

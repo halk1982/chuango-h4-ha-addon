@@ -105,7 +105,7 @@ def main(argv=None):
         print("Panel offline according to server. No status asserted.", file=sys.stderr)
     except NetworkError as error:
         print(f"Network failure: {error}. No new status confirmed; "
-              "probe stopped without automatic login retries.", file=sys.stderr)
+              "process stopped.", file=sys.stderr)
     except MQTTError as error:
         print(f"MQTT failure: {error}. Check that Mosquitto is running and MQTT is configured.",file=sys.stderr)
     except ServerRejectedError as error:

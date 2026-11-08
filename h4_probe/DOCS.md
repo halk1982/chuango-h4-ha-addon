@@ -27,7 +27,8 @@ competing with a phone login.
 | `timezone` | Local IANA timezone, for example `Europe/Athens`. |
 | `enable_controls` | Disabled by default. Enables the experimental alarm entity and arm/home/disarm commands. |
 | `confirmation_timeout` | Seconds allowed for reading the requested state after a command, default 120. |
-| `reconnect_attempts` | Bounded retries for alarm network/offline failures, default 3. No retries for login/session rejection. |
+| `reconnect_attempts` | Initial reconnect budget, default 3. Zero disables automatic cloud recovery. No retries for login/session rejection. |
+| `recover_after_outage` | MQTT only, default true. After the initial retry budget, continue network/panel-offline recovery after each five-minute wait. False keeps the old terminal limit. Does not extend server-rejection or login/session retries. |
 | `mqtt_host` | Empty for HAOS Mosquitto auto-discovery; set a hostname/IP for a different broker. |
 | `mqtt_port` | Manual broker port, default 1883. Ignored during auto-discovery. |
 | `mqtt_username`, `mqtt_password` | Manual broker credentials. Empty during HAOS auto-discovery. |
@@ -72,8 +73,8 @@ is required after reconnect before availability/controls are enabled. Mode senso
 expiration adds a fallback freshness limit. These checks do not independently
 prove the vendor has no caching; compare with your panel during testing.
 
-Transient cloud errors use increasing 30/60/120… second delays, limited by
-`reconnect_attempts`. Three stable readings reset that budget. The bridge stops
+Transient cloud errors initially use increasing 30/60/120… second delays, limited
+by `reconnect_attempts`. Three stable readings reset that budget. The bridge stops
 on an unrecognized protocol response or explicit session/account/login rejection.
 From 0.2.3, an exact negative envelope with code `08` on a read-only status query
 (server command `10`) uses that same retry budget. Its first delay is 30 seconds;
@@ -81,7 +82,8 @@ after an earlier timeout has consumed a retry, it is 60 seconds. A successful
 connection alone cannot restore availability; a fresh panel status is required.
 No uncertain arm/disarm command is replayed, including when the status read
 following its acknowledgement fails. Setting `reconnect_attempts: 0` disables
-this recovery too. Exhausting the budget still stops the add-on.
+this recovery too. Exhausting the budget still stops on a server rejection;
+network/offline failures use the 0.2.5 policy below.
 
 This narrow retry policy does not establish the vendor meaning of code `08`.
 Negative handshake, login and mode-command replies, other rejection codes and
@@ -114,6 +116,31 @@ status. The old command's result remains `unconfirmed` across connection loss;
 the actual mode still updates normally after recovery. There is no automatic
 command replay or optimistic armed/disarmed assertion. This reduces an avoidable
 delay; it does not establish why the original status response was missing.
+
+From 0.2.5, `recover_after_outage: true` keeps MQTT mode alive when the initial
+network retry budget is exhausted. It remains offline, closes the failed alarm
+connection, and waits 300 seconds before each further connection attempt. The
+failure counter is capped: a long or flapping outage cannot restart repeated
+fast bursts or grow an unbounded backoff counter. The warning says
+`Network retry budget exhausted; bridge remains offline; retry in 300 seconds`.
+The waits can be interrupted by Stop/SIGTERM. Three stable readings restore the
+normal budget and produce a recovery log; fewer readings do not reset it.
+
+The new option defaults to true, including when omitted from older options. Set
+it to false to stop after the initial retry limit. `reconnect_attempts: 0` always
+disables both initial retries and ongoing outage recovery. This affects network
+transport failures and explicit panel-offline notifications only. Code `08`
+status rejections remain bounded by the initial budget; other server/protocol
+and authentication/session/account rejections retain terminal handling.
+
+The first successful new status can restore availability before the three-read
+budget reset. No command is replayed. After connectivity returns, the next
+attempt can be up to five minutes away, with connection/query time added. This
+policy does not identify or repair the underlying router/Internet/vendor issue.
+It avoids needing Supervisor watchdog restarts for ordinary network outages.
+Keep watchdog off during validation: it can also restart an intentional terminal
+authentication/session failure and start another login attempt. Watchdog behavior
+and recovery from a physical outage must be checked on the actual HA installation.
 
 ## Keep using the short probe
 
