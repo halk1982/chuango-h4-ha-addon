@@ -12,3 +12,12 @@
 - Distinguish static protocol evidence, mock tests and user-validated behavior.
   Changes to alarm mode must never be published as confirmed from a command
   acknowledgement alone.
+
+## Project continuity
+
+- Read `PROJECT_STATE.md` at the start of every task and verify its assumptions
+  against the current checkout. Treat source/configuration as authoritative.
+- Update it in the same PR when behavior, validation, user-reported deployment
+  status, known limitations or the immediate next task changes.
+- Distinguish implemented behavior, local tests, user-reported observations and
+  unknowns. Keep the handoff concise and keep private installation data out.
