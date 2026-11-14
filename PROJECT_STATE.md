@@ -89,14 +89,15 @@ available; continuous integration uses `run_mode: mqtt`.
 
 ## Immediate next task
 
-Investigate increased status-read warnings before changing add-on code. Obtain
-the redacted camera entity/card/source configuration, then compare a period with
-only the new camera card removed and all clients showing it closed. Keep H4
-polling at 10 seconds during that comparison; correlate fresh camera errors and
-host resource measurements with recovery windows. The vendor/panel path and
-host-specific stalls remain candidates; no root cause is established. Defer the
-20-second query-load experiment until the camera lead is assessed, so variables
-do not change together. Continue gathering actual outage-recovery evidence.
+Investigate increased status-read warnings before changing add-on code. The user
+reports removing the new camera card; no post-removal log has been reviewed yet.
+Compare roughly one hour after removal with the retained baseline, keeping H4
+polling at 10 seconds and other settings unchanged. Correlate fresh camera errors
+and host resource measurements with recovery windows; obtain redacted camera
+entity/card/source configuration if that lead remains relevant. The vendor/panel
+path and host-specific stalls remain candidates; no root cause is established.
+Defer the 20-second query-load experiment until the card comparison is assessed,
+so variables do not change together. Continue gathering outage-recovery evidence.
 Backlog: agree release/tagging and versioned rollback packaging before implementing it.
 
 ## Working rules
