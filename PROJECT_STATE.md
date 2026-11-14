@@ -1,6 +1,6 @@
 # Project state
 
-Updated: 2026-11-14 (Europe/Athens). Verified release baseline: main at
+Updated: 2026-11-15 (Europe/Athens). Verified release baseline: main at
 `e175738`, version **0.2.5**. Recheck the checkout and manifest before new work.
 
 ## Project and stack
@@ -37,7 +37,13 @@ available; continuous integration uses `run_mode: mqtt`.
 - User validated physical controls through HA/HomeKit and separate Telegram
   alerts. Last user-confirmed installation: 0.2.5, updated on 2026-11-08.
 - User report on 2026-11-14: **six days of use without a failure**. No new logs
-  were reviewed for that period; it does not establish which recovery paths ran.
+  accompanied that report; it does not establish which recovery paths ran.
+- Subsequent offline review of a user-supplied export found frequent status-read
+  timeouts, with every captured interruption recovering and no captured process
+  restart/fatal exit. Exact status-query code-08 rejections also recovered. This
+  supports that bounded recovery path on the installation; the five-minute
+  ongoing-outage path was not exercised in that export. Process uptime and HA
+  control availability must be assessed separately. Detailed logs stay private.
 
 ## File responsibilities
 
@@ -73,16 +79,25 @@ available; continuous integration uses `run_mode: mqtt`.
 - Detector correlation, Home-mode PIR exclusions, Telegram messages and camera
   photos are separate private HA configuration, not add-on features. Those
   files are not in Git and must not be assumed available in another chat.
+- A newly reported Generic Camera dashboard card is an unresolved possible
+  source of shared-host load. A historical Core log had a heavy Generic Camera
+  error loop, but its identity/causality must not be assumed for the current card.
+  Camera app/recorder flaps do not themselves establish a camera-network outage.
 - Outage recovery can wait up to five minutes plus connection/query time after
   connectivity returns. It does not repair the router/Internet/vendor service;
   observing a fault-free period does not prove every recovery branch works.
 
 ## Immediate next task
 
-Continue normal stability monitoring. Record actual recovery evidence from the
-next natural outage before claiming physical validation of that path. No new
-functional change is requested by the successful six-day report. Backlog:
-agree release/tagging and versioned rollback packaging before implementing it.
+Investigate increased status-read warnings before changing add-on code. Obtain
+the redacted camera entity/card/source configuration, then compare a period with
+only the new camera card removed and all clients showing it closed. Keep H4
+polling at 10 seconds during that comparison; correlate fresh camera errors and
+host resource measurements with recovery windows. The vendor/panel path and
+host-specific stalls remain candidates; no root cause is established. Defer the
+20-second query-load experiment until the camera lead is assessed, so variables
+do not change together. Continue gathering actual outage-recovery evidence.
+Backlog: agree release/tagging and versioned rollback packaging before implementing it.
 
 ## Working rules
 
