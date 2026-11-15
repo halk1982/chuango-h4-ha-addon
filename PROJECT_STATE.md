@@ -79,25 +79,30 @@ available; continuous integration uses `run_mode: mqtt`.
 - Detector correlation, Home-mode PIR exclusions, Telegram messages and camera
   photos are separate private HA configuration, not add-on features. Those
   files are not in Git and must not be assumed available in another chat.
-- A newly reported Generic Camera dashboard card is an unresolved possible
-  source of shared-host load. A historical Core log had a heavy Generic Camera
-  error loop, but its identity/causality must not be assumed for the current card.
-  Camera app/recorder flaps do not themselves establish a camera-network outage.
+- Follow-up Core logs confirmed a current Generic Camera snapshot HTTP-503 fault
+  and stream retries after its dashboard card was removed. This is distinct
+  from the historical image-proxy HTTP-500 incident. Neither the error counts
+  nor the single low H4 resource sample establishes a causal H4/host-load link.
+  Camera app/recorder flaps do not establish a camera-network outage.
+- Downstream disarm-automation starts closely track availability recoveries.
+  Review their private YAML before treating those as physical disarms or
+  changing filters; automation starts do not prove notifications were delivered.
 - Outage recovery can wait up to five minutes plus connection/query time after
   connectivity returns. It does not repair the router/Internet/vendor service;
   observing a fault-free period does not prove every recovery branch works.
 
 ## Immediate next task
 
-Investigate increased status-read warnings before changing add-on code. The user
-reports removing the new camera card; no post-removal log has been reviewed yet.
-Compare roughly one hour after removal with the retained baseline, keeping H4
-polling at 10 seconds and other settings unchanged. Correlate fresh camera errors
-and host resource measurements with recovery windows; obtain redacted camera
-entity/card/source configuration if that lead remains relevant. The vendor/panel
-path and host-specific stalls remain candidates; no root cause is established.
-Defer the 20-second query-load experiment until the card comparison is assessed,
-so variables do not change together. Continue gathering outage-recovery evidence.
+Investigate increased status-read warnings before changing add-on code. Warnings
+continued after card removal while its Generic Camera backend was still active.
+The user now reports disabling that Generic Camera entry, with H4 already quiet
+before this last change. No post-disable log has been reviewed: do not attribute
+the reported improvement to that change. Observe 30–60 minutes from the disable
+time, keeping H4 polling at 10 seconds and other settings fixed. Confirm camera
+errors stop and compare H4 recovery windows and host telemetry. If symptoms
+persist, move to panel-specific Wi-Fi/cloud-path checks and a separate 20-second
+query-load trial within the freshness limit. Review the external disarm-trigger
+guards separately. No root cause is established; no new application patch yet.
 Backlog: agree release/tagging and versioned rollback packaging before implementing it.
 
 ## Working rules
