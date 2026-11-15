@@ -50,6 +50,11 @@ available; continuous integration uses `run_mode: mqtt`.
   routine status timeouts. All captured interruptions recovered without a
   restart/fatal exit. This does not establish a mode-dependent cause: time of
   day, client activity and other conditions changed too.
+- Local review counterexamples showed that a pre-query heartbeat can produce
+  the same timeout counter, and that deliberately keeping a timed-out connection
+  can accept a delayed earlier status as a later read. The latter models a
+  proposed recovery change, not current bridge behavior; production closes the
+  connection. No real alarm was involved and application behavior is unchanged.
 
 ## File responsibilities
 
@@ -74,6 +79,15 @@ available; continuous integration uses `run_mode: mqtt`.
 - Polling remains necessary. Reliable siren/detector push is not implemented;
   server command 53 and the vendor meaning of rejection 08 are not decoded.
   Accessory discovery does not establish live detector events.
+- `CGS0202` is heartbeat traffic in this client, not proof of acknowledgement
+  of a particular status query. Per-phase counters can include earlier queued
+  replies. Clean host probes or ARP broadcasts alone do not isolate the failing
+  panel/cloud segment or establish a Wi-Fi disconnection.
+- Status queries reuse marker `5555`. An extra query on a timed-out connection
+  needs tests for delayed/out-of-order replies, freshness and command gating.
+  The per-query deadline has already expired when its timeout is raised;
+  a retry needs an explicit bounded budget. Do not deploy this behavior on the
+  assumption that keeping TCP open guarantees availability or a current state.
 - Do not casually increase polling intervals: control freshness currently caps
   at 30 seconds (`min(30, interval + 20)`). Last testing recommendation:
   10-second polling, start on boot enabled, watchdog disabled to avoid restarting
@@ -99,21 +113,22 @@ available; continuous integration uses `run_mode: mqtt`.
 
 ## Immediate next task
 
-Focus on H4 status-query reliability without treating the camera as the working
-explanation. A later overnight log is reviewed, but no corresponding Core log
-or camera configuration verifies that path's state. The quiet period had already
-begun before the reported Generic Camera disable. The user reports opening
-HomeKit for the successful morning disarm and says the separate camera add-on
-works; do not confuse that add-on with HA's Generic Camera entry.
+Obtain a synchronized failure timeline through the user's authorized live
+diagnostic route: actual running options/revision, the add-on's existing TCP
+request/reply timing, panel AP association/RSSI/retry evidence and host/container
+metrics in the same window. Record probe targets and capture vantage points;
+reported clean-host measurements have not been independently reviewed here.
+Return metadata only, keeping captures/credentials/private HA data outside Git.
+Do not create a second authenticated H4 client or perform alarm-control actions.
 
-Leave camera settings as currently configured. Track whether the quiet Home
-versus recurring Disarmed pattern repeats, without assigning causality to one
-mode or forcing alarm changes for a test. If daytime warnings persist, use a
-separate 20-second polling trial for 1–2 hours within the 30-second freshness
-limit, keeping other variables fixed. Compare failed-read fraction and recovery
-time as well as warnings/hour. Check the panel's own Wi-Fi/cloud path and host
-telemetry if needed, and review private disarm-trigger guards separately. No
-root cause is established and no new application patch is justified yet.
+Keep current settings fixed for this first pass. Existing receive diagnostics
+can help if already enabled, but idle draining affects when queued frames are
+consumed. Prefer observed timing over a causal `PanelNoReply` label. Decide on
+additional instrumentation or a recovery design only after that evidence;
+watchdog policy is already documented. A separate 20-second load trial remains
+an option within the freshness cap, not a proven fix. Leave the camera outside
+the primary H4 explanation and review private disarm-trigger guards separately.
+No root cause is established and no application change is made by this review.
 Backlog: agree release/tagging and versioned rollback packaging before implementing it.
 
 ## Working rules
