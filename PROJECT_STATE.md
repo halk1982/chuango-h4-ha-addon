@@ -1,7 +1,8 @@
 # Project state
 
-Updated: 2026-11-15 (Europe/Athens). Verified release baseline: main at
-`e175738`, version **0.2.5**. Recheck the checkout and manifest before new work.
+Updated: 2026-11-15 (Europe/Athens). Application baseline: **0.2.5**, code commit
+`09ee422` (merged as `e175738`). Recheck the checkout and manifest before work;
+documentation revisions can change independently of that application baseline.
 
 ## Project and stack
 
@@ -44,6 +45,11 @@ available; continuous integration uses `run_mode: mqtt`.
   supports that bounded recovery path on the installation; the five-minute
   ongoing-outage path was not exercised in that export. Process uptime and HA
   control availability must be assessed separately. Detailed logs stay private.
+- A later overnight export showed a much quieter armed-home period with one
+  transient recovery, followed by a successful morning disarm and several later
+  routine status timeouts. All captured interruptions recovered without a
+  restart/fatal exit. This does not establish a mode-dependent cause: time of
+  day, client activity and other conditions changed too.
 
 ## File responsibilities
 
@@ -93,16 +99,21 @@ available; continuous integration uses `run_mode: mqtt`.
 
 ## Immediate next task
 
-Investigate increased status-read warnings before changing add-on code. Warnings
-continued after card removal while its Generic Camera backend was still active.
-The user now reports disabling that Generic Camera entry, with H4 already quiet
-before this last change. No post-disable log has been reviewed: do not attribute
-the reported improvement to that change. Observe 30–60 minutes from the disable
-time, keeping H4 polling at 10 seconds and other settings fixed. Confirm camera
-errors stop and compare H4 recovery windows and host telemetry. If symptoms
-persist, move to panel-specific Wi-Fi/cloud-path checks and a separate 20-second
-query-load trial within the freshness limit. Review the external disarm-trigger
-guards separately. No root cause is established; no new application patch yet.
+Focus on H4 status-query reliability without treating the camera as the working
+explanation. A later overnight log is reviewed, but no corresponding Core log
+or camera configuration verifies that path's state. The quiet period had already
+begun before the reported Generic Camera disable. The user reports opening
+HomeKit for the successful morning disarm and says the separate camera add-on
+works; do not confuse that add-on with HA's Generic Camera entry.
+
+Leave camera settings as currently configured. Track whether the quiet Home
+versus recurring Disarmed pattern repeats, without assigning causality to one
+mode or forcing alarm changes for a test. If daytime warnings persist, use a
+separate 20-second polling trial for 1–2 hours within the 30-second freshness
+limit, keeping other variables fixed. Compare failed-read fraction and recovery
+time as well as warnings/hour. Check the panel's own Wi-Fi/cloud path and host
+telemetry if needed, and review private disarm-trigger guards separately. No
+root cause is established and no new application patch is justified yet.
 Backlog: agree release/tagging and versioned rollback packaging before implementing it.
 
 ## Working rules
