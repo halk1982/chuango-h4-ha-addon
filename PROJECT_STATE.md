@@ -55,6 +55,12 @@ available; continuous integration uses `run_mode: mqtt`.
   can accept a delayed earlier status as a later read. The latter models a
   proposed recovery change, not current bridge behavior; production closes the
   connection. No real alarm was involved and application behavior is unchanged.
+- A subsequent authorized external read-only report correlated two ordinary
+  status timeouts with the combined HA alarm becoming unavailable for about
+  32 seconds, then returning to disarmed without an add-on restart. Raw MQTT
+  historical transitions were not available. The report identifies installed
+  version 0.2.5, but not its build revision or actual option values. No settings
+  or physical alarm state were changed during that collection.
 
 ## File responsibilities
 
@@ -105,30 +111,44 @@ available; continuous integration uses `run_mode: mqtt`.
   nor the single low H4 resource sample establishes a causal H4/host-load link.
   Camera app/recorder flaps do not establish a camera-network outage.
 - Downstream disarm-automation starts closely track availability recoveries.
-  Review their private YAML before treating those as physical disarms or
-  changing filters; automation starts do not prove notifications were delivered.
+  The external read-only check reports two private automations trigger on entry
+  to disarmed without excluding unavailable-to-disarmed recovery; the daylight
+  condition in one sequence occurs after its light-off action. This permits
+  recovery-triggered effects, but event-specific traces were not supplied and
+  execution/delivery is not confirmed. Propose a prior-state guard before side
+  effects; preserve other conditions unless their intended behavior is agreed.
 - Outage recovery can wait up to five minutes plus connection/query time after
   connectivity returns. It does not repair the router/Internet/vendor service;
   observing a fault-free period does not prove every recovery branch works.
 
 ## Immediate next task
 
-Obtain a synchronized failure timeline through the user's authorized live
-diagnostic route: actual running options/revision, the add-on's existing TCP
-request/reply timing, panel AP association/RSSI/retry evidence and host/container
-metrics in the same window. Record probe targets and capture vantage points;
-reported clean-host measurements have not been independently reviewed here.
-Return metadata only, keeping captures/credentials/private HA data outside Git.
-Do not create a second authenticated H4 client or perform alarm-control actions.
+The first read-only collection is complete within its access limits: host ping
+probes and a later resource snapshot do not cover the failed H4 TCP flow or
+panel Wi-Fi. No synchronized packet/AP/container evidence was obtainable. Do
+not repeat requests for unavailable data or infer a cause from these probes.
 
-Keep current settings fixed for this first pass. Existing receive diagnostics
-can help if already enabled, but idle draining affects when queued frames are
-consumed. Prefer observed timing over a causal `PanelNoReply` label. Decide on
-additional instrumentation or a recovery design only after that evidence;
-watchdog policy is already documented. A separate 20-second load trial remains
+Prepare private automation edits that accept disarm transitions only from
+known armed/triggered states, before notification/light actions. Review the
+full YAML and retain unrelated behavior; automation traces should identify
+the prior/new states without exposing private targets or message bodies.
+
+For the next diagnostic step, verify actual options in the HA add-on UI.
+If receive diagnostics are off, propose enabling only `event_diagnostics` for
+a bounded capture (two natural timeouts or at most 30 minutes), with a planned
+add-on restart while disarmed, then restore the prior flag. Keep polling,
+controls and recovery settings unchanged. This change has not been applied.
+Idle draining changes where queued frames are consumed, so a quieter test
+alone cannot establish a fix. Evaluate safe send-timing instrumentation if
+existing receive metadata is insufficient; no same-session retry is implemented
+or recommended for deployment. Return metadata only; keep captures, credentials
+and private HA data outside Git. No second H4 login or forced alarm/network
+outage is needed.
+
+Watchdog policy is already documented. A separate 20-second load trial remains
 an option within the freshness cap, not a proven fix. Leave the camera outside
-the primary H4 explanation and review private disarm-trigger guards separately.
-No root cause is established and no application change is made by this review.
+the primary explanation. No root cause is established and no application
+change is made by this review.
 Backlog: agree release/tagging and versioned rollback packaging before implementing it.
 
 ## Working rules
