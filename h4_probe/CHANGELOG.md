@@ -1,3 +1,21 @@
+# 0.2.6
+
+- Add default-off `request_timing` in MQTT and probe modes, independent of
+  `event_diagnostics`. Timing alone never activates idle-frame draining.
+- Log separate status/heartbeat write-start and completion/failure records,
+  with safe command IDs, request marker, intended size, monotonic due/start/end,
+  scheduling lateness, write duration and sanitized failure category.
+- Label initial and post-command status reads explicitly without interpreting
+  the zero scheduling sentinel as a deadline. Preserve existing schedules,
+  timeout/deadline placement, receive-age semantics, recovery and no-replay rules.
+- Keep `sendall`: successful completion means local stack acceptance only;
+  failed writes report unknown partial progress. Never log bodies, credentials,
+  device/account identifiers, endpoints or unrestricted exception text.
+- Cover timing, privacy, flag independence and recovery with fake clocks,
+  partial-write failures, loopback servers and the existing MQTT regressions.
+  Document a bounded capture changing only `request_timing`; physical validation
+  and the cause of intermittent missing status responses remain outstanding.
+
 # 0.2.5
 
 - Keep MQTT mode alive through prolonged network/panel-offline failures with

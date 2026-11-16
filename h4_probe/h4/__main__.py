@@ -31,19 +31,27 @@ def run(options):
     event_diagnostics = options.get("event_diagnostics",False)
     if type(event_diagnostics) is not bool:
         raise ValueError("event_diagnostics must be a boolean")
-    if event_diagnostics:
+    request_timing = options.get("request_timing",False)
+    if type(request_timing) is not bool:
+        raise ValueError("request_timing must be a boolean")
+    if event_diagnostics or request_timing:
         logging.basicConfig(level=logging.INFO,format="%(asctime)s %(levelname)s %(message)s")
     zone = ZoneInfo(options.get("timezone", "Europe/Athens"))
     client = StatusClient(options.get("device_id", ""), options.get("username", ""),
                           options.get("password", ""),
                           allow_plaintext=options.get("allow_plaintext", False),
-                          event_diagnostics=event_diagnostics)
+                          event_diagnostics=event_diagnostics, request_timing=request_timing)
     print("Experimental H4 status probe: login and status queries only; no arm/disarm commands.", file=sys.stderr, flush=True)
     previous_mode_code = None
     try:
         client.connect()
+        next_sample = None
         for i in range(samples):
-            status = client.status(datetime.now(zone))
+            if request_timing:
+                status = client.status(datetime.now(zone), scheduled_due=next_sample,
+                                       schedule="initial" if i == 0 else "poll")
+            else:
+                status = client.status(datetime.now(zone))
             output = status.as_dict()
             output["accessory_count"] = len(status.accessories)
             output["mode_changed"] = None if previous_mode_code is None else status.mode_code != previous_mode_code
@@ -54,7 +62,7 @@ def run(options):
             output["sample"] = i + 1
             print(json.dumps(output), flush=True)
             if i + 1 < samples:
-                client.wait(interval)
+                next_sample = client.wait(interval)
     finally:
         client.close()
     print(f"Probe completed normally after {samples} samples.", file=sys.stderr, flush=True)
@@ -69,6 +77,7 @@ def main(argv=None):
     parser.add_argument("--timezone", default="Europe/Athens")
     parser.add_argument("--include-accessories", action="store_true", help="Include raw accessory records in logs")
     parser.add_argument("--event-diagnostics", action="store_true", help="Log safe incoming IDs between polls; no event-driven state updates")
+    parser.add_argument("--request-timing", action="store_true", help="Log safe status/heartbeat write timing; does not enable idle draining")
     args = parser.parse_args(argv)
     try:
         if args.options:
@@ -83,7 +92,8 @@ def main(argv=None):
                        "allow_plaintext": True, "samples": args.samples,
                        "interval": args.interval, "timezone": args.timezone,
                        "include_accessories": args.include_accessories,
-                       "event_diagnostics": args.event_diagnostics}
+                       "event_diagnostics": args.event_diagnostics,
+                       "request_timing": args.request_timing}
         run_mode = options.get("run_mode","probe")
         if run_mode == "mqtt":
             from .bridge import run_bridge

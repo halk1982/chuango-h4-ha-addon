@@ -13,7 +13,7 @@ slug, so existing users update their current installation.
 ## Update and start MQTT monitoring
 
 1. In the Add-on/App Store, select **⋮ → Check for updates**, open your installed
-   add-on and update to **0.2.2**. Its display name is now **Chuango H4 MQTT Bridge
+   add-on and update to **0.2.6**. Its display name is now **Chuango H4 MQTT Bridge
    (experimental)**.
 2. Keep your existing panel ID, dedicated account, password, timezone and
    `allow_plaintext` setting. Set `run_mode: mqtt`, `interval: 10` and
@@ -105,6 +105,14 @@ bodies. The exact format of the reported 0.2.1 marker error was not captured;
 the new handling is mock-tested and still needs physical validation.
 
 ## Faster-update investigation
+
+Version **0.2.6** adds separate, default-off `request_timing` for status and
+heartbeat writes. It records scheduling lateness, write duration and safe
+completion/failure metadata. Write completion establishes local stack acceptance
+only. Timing does not enable idle draining or change retries/confirmation.
+For the first [bounded timing capture](h4_probe/DOCS.md#first-bounded-capture),
+change only `request_timing`; preserve the current receive diagnostics, interval,
+controls and recovery options. No same-connection retry is added.
 
 The first diagnostic change (0.2.1) adds disabled-by-default `event_diagnostics`.
 It logs safe incoming identifiers between polls and during requests without

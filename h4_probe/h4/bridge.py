@@ -32,10 +32,11 @@ class Confirmation:
 
 
 def connected_loop(client, broker, stop, *, interval, zone, confirmation_timeout,
-                   on_stable=None, event_diagnostics=False):
+                   on_stable=None, event_diagnostics=False, request_timing=False):
     pending = None
     pending_epoch = None
     next_poll, next_heartbeat = 0, time.monotonic()+10
+    poll_schedule = "initial"
     stable_reads = 0
     while not stop.is_set():
         if event_diagnostics:
@@ -43,7 +44,12 @@ def connected_loop(client, broker, stop, *, interval, zone, confirmation_timeout
         now = time.monotonic()
         if now >= next_poll:
             try:
-                status = client.status(datetime.now(zone))
+                if request_timing:
+                    status = client.status(datetime.now(zone),
+                                           scheduled_due=None if next_poll == 0 else next_poll,
+                                           schedule=poll_schedule)
+                else:
+                    status = client.status(datetime.now(zone))
             except NetworkTimeoutError as error:
                 if pending is None or time.monotonic() >= pending.deadline:
                     raise
@@ -60,8 +66,12 @@ def connected_loop(client, broker, stop, *, interval, zone, confirmation_timeout
                     pending = None
             LOG.info("Panel mode=%s; accessories=%d",status.mode,len(status.accessories))
             next_poll = time.monotonic()+interval
+            poll_schedule = "poll"
         if time.monotonic() >= next_heartbeat:
-            client.heartbeat()
+            if request_timing:
+                client.heartbeat(scheduled_due=next_heartbeat, schedule="periodic")
+            else:
+                client.heartbeat()
             next_heartbeat = time.monotonic()+10
         command = broker.take_command(timeout=min(1,max(0,next_poll-time.monotonic())))
         if command is not None:
@@ -84,6 +94,7 @@ def connected_loop(client, broker, stop, *, interval, zone, confirmation_timeout
             # Read actual state after the acknowledgement; never set the
             # reported state from the requested action or the ACK alone.
             next_poll = 0
+            poll_schedule = "post_command"
     return stable_reads
 
 
@@ -96,6 +107,9 @@ def run_bridge(options, *, stop=None, client_factory=StatusClient, broker_factor
     event_diagnostics = options.get("event_diagnostics",False)
     if type(event_diagnostics) is not bool:
         raise ValueError("Invalid event diagnostic flag")
+    request_timing = options.get("request_timing",False)
+    if type(request_timing) is not bool:
+        raise ValueError("Invalid request timing flag")
     if type(interval) is not int or not 5 <= interval <= 300:
         raise ValueError("Invalid polling interval")
     if type(controls) is not bool or type(options.get("allow_plaintext",False)) is not bool:
@@ -114,12 +128,14 @@ def run_bridge(options, *, stop=None, client_factory=StatusClient, broker_factor
             signal.signal(signum,lambda *_:stop.set())
     client = client_factory(options.get("device_id",""),options.get("username",""),
                             options.get("password",""),allow_plaintext=options.get("allow_plaintext",False),
-                            event_diagnostics=event_diagnostics)
+                            event_diagnostics=event_diagnostics, request_timing=request_timing)
     broker = broker_factory(broker_settings(options),options["device_id"],controls=controls,interval=interval)
     LOG.info("Starting MQTT bridge version=%s; controls %s", VERSION,
              "enabled (experimental)" if controls else "disabled")
     if event_diagnostics:
         LOG.info("H4 receive diagnostics enabled; idle frames do not update MQTT state")
+    if request_timing:
+        LOG.info("H4 request timing enabled; write completion means local stack acceptance only")
     failures = 0
     outage_cooldown = False
     def stable():
@@ -136,7 +152,7 @@ def run_bridge(options, *, stop=None, client_factory=StatusClient, broker_factor
                 client.connect()
                 connected_loop(client,broker,stop,interval=interval,zone=zone,
                                confirmation_timeout=confirm_timeout,on_stable=stable,
-                               event_diagnostics=event_diagnostics)
+                               event_diagnostics=event_diagnostics, request_timing=request_timing)
                 return
             except AuthenticationError:
                 LOG.error("Alarm authentication/session ended. Stopping without login retries.")

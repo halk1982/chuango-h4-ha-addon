@@ -92,13 +92,16 @@ class Wire:
 
 class StatusClient:
     def __init__(self, device_id, username, password, *, allow_plaintext=False,
-                 directory=DIRECTORY, endpoint=None, timeout=15, event_diagnostics=False):
+                 directory=DIRECTORY, endpoint=None, timeout=15, event_diagnostics=False,
+                 request_timing=False):
         if not allow_plaintext:
             raise ValueError("The traced app uses plaintext TCP. Explicit opt-in is required.")
         if not 0 < timeout <= 120:
             raise ValueError("Timeout must be between 0 and 120 seconds")
         if type(event_diagnostics) is not bool:
             raise ValueError("event_diagnostics must be a boolean")
+        if type(request_timing) is not bool:
+            raise ValueError("request_timing must be a boolean")
         # Validate credentials before initiating any connection.
         self._login = login_request(device_id, username, password)
         self._lookup = directory_request(device_id)
@@ -106,6 +109,7 @@ class StatusClient:
         self.wire = None
         self._reply_counts = Counter()
         self.event_diagnostics = event_diagnostics
+        self.request_timing = request_timing
         self._phase = "idle"
         self._last_status_request = None
         self._diagnostic_lines = 0
@@ -249,12 +253,53 @@ class StatusClient:
             self.close()
             raise
 
-    def status(self, now: datetime):
+    def _write_request(self, packet, operation, scheduled_due, schedule):
+        if not self.request_timing:
+            self.wire.write(packet)
+            return
+        # Only status/heartbeat call this helper. Validate IDs before logging;
+        # never interpolate packet bodies, endpoints or exception messages.
+        expected = {"status": b"10", "heartbeat": b"02"}[operation]
+        server = expected.decode("ascii") if packet[:7] == b"CGC02" + expected else "unavailable"
+        device = "none" if operation == "heartbeat" else "unavailable"
+        if operation == "status" and server == "10" and packet[15:17] == b"20":
+            device = "20"
+        marker = packet[7:11]
+        marker = marker.decode("ascii") if len(marker) == 4 and marker.isdigit() else "unavailable"
+        schedule = schedule if schedule in (
+            "initial", "poll", "post_command", "periodic", "probe_wait_end", "direct"
+        ) else "direct"
+        due = "none" if scheduled_due is None else f"{scheduled_due:.6f}"
+        fields = (operation, server, device, marker, len(packet), schedule, due)
+        message = ("H4 TX operation=%s server_command=%s device_command=%s marker=%s "
+                   "intended_bytes=%d schedule=%s due_mono_s=%s")
+        LOG.info(message + " event=write_start observed_mono_s=%.6f", *fields, time.monotonic())
+        # Sample actual call entry after the start log, excluding its overhead
+        # from write duration while including it in scheduling lateness.
+        write_start = time.monotonic()
+        try:
+            self.wire.write(packet)
+        except OSError as error:
+            end = time.monotonic()
+            lateness = "none" if scheduled_due is None else f"{max(0, write_start-scheduled_due):.6f}"
+            category = ("timeout" if isinstance(error, TimeoutError) else
+                        "reset" if isinstance(error, ConnectionResetError) else "write-error")
+            LOG.info(message + " event=write_failed start_mono_s=%.6f lateness_s=%s "
+                     "end_mono_s=%.6f write_duration_s=%.6f failure=%s progress=unknown",
+                     *fields, write_start, lateness, end, end-write_start, category)
+            raise
+        end = time.monotonic()
+        lateness = "none" if scheduled_due is None else f"{max(0, write_start-scheduled_due):.6f}"
+        LOG.info(message + " event=write_complete start_mono_s=%.6f lateness_s=%s "
+                 "end_mono_s=%.6f write_duration_s=%.6f result=local_stack_accepted",
+                 *fields, write_start, lateness, end, end-write_start)
+
+    def status(self, now: datetime, *, scheduled_due=None, schedule="direct"):
         if self.wire is None:
             raise RuntimeError("Client is not connected")
         with self._transport("status query"):
             self._last_status_request = time.monotonic()
-            self.wire.write(status_request(now))
+            self._write_request(status_request(now), "status", scheduled_due, schedule)
             deadline = time.monotonic() + self.timeout
             while True:
                 frame = self._read_frame(deadline)
@@ -273,8 +318,13 @@ class StatusClient:
             self.observe_events()
             now = time.monotonic()
             if now >= next_heartbeat or now >= deadline:
-                self.heartbeat()
+                if self.request_timing:
+                    self.heartbeat(scheduled_due=min(next_heartbeat, deadline),
+                                   schedule="probe_wait_end" if deadline <= next_heartbeat else "periodic")
+                else:
+                    self.heartbeat()
                 next_heartbeat = now + 10
+        return deadline
 
     def observe_events(self):
         """Diagnostics only: drain idle frames, never publish/confirm mode from them.
@@ -291,9 +341,9 @@ class StatusClient:
                     break
                 self._parse_received(line)
 
-    def heartbeat(self):
+    def heartbeat(self, *, scheduled_due=None, schedule="direct"):
         with self._transport("heartbeat write"):
-            self.wire.write(heartbeat_request())
+            self._write_request(heartbeat_request(), "heartbeat", scheduled_due, schedule)
 
     def change_mode(self, mode_code):
         """Send once, require the app's 09 acknowledgement; caller must read state."""

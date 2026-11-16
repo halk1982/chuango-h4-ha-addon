@@ -36,6 +36,7 @@ competing with a phone login.
 | `samples` | Probe only: number of replies before normal completion. |
 | `include_accessories` | Probe only: include raw sensor records. Leave off for compact logs. |
 | `event_diagnostics` | Off by default. Log safe identifiers while awaiting replies and between polls. Never changes MQTT state from idle frames. |
+| `request_timing` | Off by default. Log status/heartbeat write start, completion/failure and monotonic scheduling/duration. Independent of `event_diagnostics`; does not enable idle draining. |
 
 MQTT auto-discovery reads the fixed local Supervisor endpoint and does not log
 its token, broker password or response. The alarm and MQTT passwords are separate.
@@ -150,7 +151,84 @@ home, then disarmed for 30 seconds each. Compare the physical LED with the logs.
 `mode_changed` compares received values, not the physical LED independently.
 Normal sample completion is logged explicitly.
 
+## Optional request-send timing (0.2.6)
+
+`request_timing: true` adds two timestamped `H4 TX` records for each status or
+heartbeat write: `event=write_start`, followed by `event=write_complete` or
+`event=write_failed`. Directory, handshake, login and alarm-mode writes are not
+instrumented. Probe mode also supports `--request-timing` when used interactively,
+or the same boolean in its private `--options` JSON file.
+
+The records include only the intended operation, validated command identifiers,
+the four-digit request marker (still `5555`), intended byte count and timing
+metadata. Status identifies server command `10` / device command `20`; heartbeat
+identifies server command `02` with no device command. Payloads, credentials,
+tokens, device/account identifiers, endpoints and exception text are excluded.
+
+| Field | Interpretation |
+| --- | --- |
+| Normal log timestamp | Wall-clock time of that record. Check the log timezone before comparing HA events. |
+| `due_mono_s` | Existing worker's scheduled deadline, in monotonic seconds; no wall-clock meaning. |
+| `observed_mono_s` | Sample just before emitting the write-start record, so a blocked write still has an entry record. |
+| `start_mono_s`, `lateness_s` | In completion/failure records: actual write-call entry sampled after the start record; lateness is `max(0, start - due)`, including any start-logging delay. |
+| `schedule` | `poll` or `periodic` for scheduled operations; `initial` and `post_command` identify immediate status reads with `due_mono_s=none lateness_s=none`. `direct` means no caller schedule was supplied. Probe heartbeats forced at the end of its wait use `probe_wait_end`. |
+| `intended_bytes` | Packet length passed to the existing `sendall`; not a count of delivered bytes. |
+| `end_mono_s`, `write_duration_s` | Write return/failure time and elapsed time inside `Wire.write` / `sendall` (`end - start`). Duration excludes logging the start record. |
+| `result=local_stack_accepted` | The entire `sendall` completed locally. This does not prove transmission, server receipt or an alarm response. |
+| `failure=timeout/reset/write-error progress=unknown` | Sanitized write failure category. Partial progress may be unknown; neither zero progress nor full delivery is asserted. Existing error propagation/recovery still applies. |
+
+Initial reads after every connection and post-command immediate reads have no
+periodic deadline; the scheduler's zero sentinel is never logged as an ancient
+due time. In probe mode the next status uses the existing wait-end deadline;
+MQTT polls remain scheduled from completion of the preceding status processing.
+Heartbeats and status share the worker: a status read can delay a heartbeat.
+These records add logging overhead, but do not change polling/heartbeat rules,
+timeouts, response-deadline placement after writes, retries or confirmation.
+No same-connection status retry is introduced.
+
+Receive diagnostics remain controlled only by `event_diagnostics`. Enabling
+timing alone does not poll/drain idle frames. Existing `since_status_request_s`
+still starts before building/writing the latest status request, includes its
+write time and is not reset by heartbeats. It does not measure server latency.
+
+### First bounded capture
+
+1. After this change is reviewed and merged, use **Settings → Add-ons/Apps →
+   Store → ⋮ → Check for updates**, then update the existing Chuango H4 add-on
+   to **0.2.6**. Do not install a second instance or open a second alarm login.
+2. Verify the actual configuration locally. Note the existing
+   `event_diagnostics`, `interval`, `enable_controls`, `reconnect_attempts` and
+   `recover_after_outage` values without exporting credentials. Preserve all
+   those settings, run mode, watchdog and other options. Change only
+   **`request_timing: true`** in Configuration and save.
+3. During a planned safe window while disarmed, restart the add-on once. Check
+   the startup version and `H4 request timing enabled` message, then the first
+   `H4 TX ... event=write_start` / completion pair. Do not operate the alarm,
+   force a network outage or change the polling interval for this capture.
+4. Capture until **two natural status timeouts or 30 minutes**, whichever comes
+   first. Keep the new `H4 TX` lines, existing `H4 RX` metadata if already enabled,
+   sanitized timeout/retry/recovery messages and related HA availability times.
+   Include roughly one minute before and after each incident. If no timeout
+   occurs, report the duration and that no incident was captured.
+5. Set only `request_timing` back to **false**, save and restart once in another
+   safe window while disarmed. Preserve the pre-existing receive-diagnostics
+   setting and all other options. Share safe metadata only; no raw packets,
+   private options, credentials or complete unfiltered HA log exports.
+
+Ask Hermes to collect that bounded window read-only, report the observed version,
+nonsecret option values, log timezone and any restart, and retain both start and
+completion/failure records for status and heartbeat writes. Correlate their due
+time, start, duration, parsed receives and availability transitions. A completed
+local write followed by no parsed reply does not establish that no bytes arrived
+or identify a panel/Wi-Fi/vendor/network cause. `CGS0202` remains heartbeat traffic,
+not an acknowledgement of a particular status query. No forced alarm actions,
+second login, settings changes by Hermes or raw MQTT credentials are needed.
+
 ## Optional receive diagnostics (0.2.1)
+
+The older RF/app exercise below is a separate investigation. For the first
+request-timing capture, follow the bounded procedure above and preserve the
+existing receive-diagnostics setting, polling interval and controls.
 
 This is the first investigation step toward faster updates. It observes message
 identifiers while no request is active, as well as during normal replies.
