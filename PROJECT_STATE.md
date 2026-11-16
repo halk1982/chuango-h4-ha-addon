@@ -53,6 +53,17 @@ available; continuous integration uses `run_mode: mqtt`.
   in a temporary Dockerfile outside Git; TLS and dependency hashes stayed
   verified. No physical alarm, production broker or HAOS deployment was used;
   aarch64 execution and physical diagnostic capture remain unverified.
+- Implementation commit `7b82803` is pushed on `feature/request-send-timing`.
+  Git fetch/push work. PR listing and creation were rechecked, but the proxy
+  rejects CONNECT to `api.github.com` with HTTP 403 before GitHub can respond;
+  that host is absent from the current restricted allowlist. An existing CLI
+  token variable is present; its API scope is untested, not proven missing.
+  The environment draft now adds only `api.github.com`, preserving other
+  settings/presets. Saving the draft does not apply network access. Review/save
+  that addition in environment settings, then retry PR creation with the
+  existing authentication. Until then, use the GitHub compare/new-PR page:
+  https://github.com/halk1982/chuango-h4-ha-addon/compare/main...feature/request-send-timing
+  No PR has been created, and no merge, release or physical operation occurred.
 - Local validation on 2026-11-08: **80 tests passed**, including three isolated
   Mosquitto tests; amd64 container build and smoke check passed. That application
   tree is now merged into main. No physical alarm was operated by the agent;
